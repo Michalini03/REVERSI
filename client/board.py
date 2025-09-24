@@ -1,8 +1,8 @@
-from arcade.shape_list import ShapeElementList, create_rectangle_outline
+from arcade.shape_list import ShapeElementList, create_rectangle_outline, create_ellipse_filled
 from stone import Stone
 import arcade
 
-MAP_SIZE = 8
+BOARD_SIZE = 8
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
@@ -11,18 +11,18 @@ class Board(ShapeElementList):
 
     def __init__(self):
         super().__init__()
-        self.grid = [[0 for _ in range(MAP_SIZE)] for _ in range(MAP_SIZE)]
+        self.grid = [[0 for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         self.create_walls()
         self.setup_initial_stones()
 
     def create_walls(self):
         """Create wall shapes based on the grid"""
         wall_color = arcade.color.BLACK
-        wall_width = WINDOW_WIDTH / MAP_SIZE
-        wall_height = WINDOW_HEIGHT / MAP_SIZE
+        wall_width = WINDOW_WIDTH / BOARD_SIZE
+        wall_height = WINDOW_HEIGHT / BOARD_SIZE
 
-        for row in range(MAP_SIZE):
-            for col in range(MAP_SIZE):
+        for row in range(BOARD_SIZE):
+            for col in range(BOARD_SIZE):
                 x = col * wall_width + wall_width / 2
                 y = row * wall_height + wall_height / 2
                 wall = create_rectangle_outline(x, y, wall_width, wall_height, wall_color, 4)
@@ -30,7 +30,7 @@ class Board(ShapeElementList):
 
     def setup_initial_stones(self):
         """Set up the initial four stones in the center of the board"""
-        center = MAP_SIZE // 2
+        center = BOARD_SIZE // 2
         positions = [
             (center - 1, center - 1, arcade.color.WHITE),
             (center, center, arcade.color.WHITE),
@@ -39,17 +39,24 @@ class Board(ShapeElementList):
         ]
 
         for row, col, color in positions:
-            posX = (col * (WINDOW_WIDTH / MAP_SIZE)) + (WINDOW_WIDTH / MAP_SIZE) / 2
-            posY = (row * (WINDOW_HEIGHT / MAP_SIZE)) + (WINDOW_HEIGHT / MAP_SIZE) / 2
+            posX = (col * (WINDOW_WIDTH / BOARD_SIZE)) + (WINDOW_WIDTH / BOARD_SIZE) / 2
+            posY = (row * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
             self.grid[row][col] = Stone(color, posX, posY)
 
     def draw(self):
         """Draw the board"""
         super().draw()
-        for row in range(MAP_SIZE):
-            for col in range(MAP_SIZE):
+        for row in range(BOARD_SIZE):
+            for col in range(BOARD_SIZE):
                 if isinstance(self.grid[row][col], Stone):
                     self.grid[row][col].draw()
+                elif self.grid[row][col] == -1:
+                    centerX = (row * (WINDOW_WIDTH / BOARD_SIZE)) + (WINDOW_WIDTH / BOARD_SIZE) / 2
+                    centerY = (col * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
+                    width = (WINDOW_WIDTH / BOARD_SIZE) * 0.6
+                    height = (WINDOW_HEIGHT / BOARD_SIZE) * 0.6
+                    create_ellipse_filled(centerX, centerY, width, height, arcade.color.ASH_GREY).draw()
+
 
     def check_rules(self, indexX, indexY, color):
         """
@@ -63,8 +70,8 @@ class Board(ShapeElementList):
         Returns:
             bool: True if move is valid, False otherwise
         """
-        if self.grid[indexY][indexX] != 0:
-            return False  # Cell is not empty
+        if isinstance(self.grid[indexY][indexX], Stone):
+            return False, 0  # Cell is not empty
 
         opponent = 2 if color == 1 else 1
         valid_move = False
@@ -86,7 +93,7 @@ class Board(ShapeElementList):
             found_opponent = False
 
             while 0 <= x < 8 and 0 <= y < 8:
-                if self.grid[y][x] == 0:
+                if not isinstance(self.grid[y][x], Stone):
                     break
                 elif self.grid[y][x].id == opponent:
                     found_opponent = True
@@ -113,3 +120,18 @@ class Board(ShapeElementList):
                 self.grid[y][x].color = arcade.color.BLACK if color == 1 else arcade.color.WHITE
                 x += dx
                 y += dy
+
+    def check_possible_moves(self, player):
+        user_can_play = False
+        for i in range(BOARD_SIZE):
+            for j in range(BOARD_SIZE):
+                if not isinstance(self.grid[i][j], Stone):
+                    is_valid: bool
+                    is_valid, _ = self.check_rules(i, j, player)
+                    if(is_valid): 
+                        self.grid[i][j] = -1
+                        user_can_play = True
+                    else:
+                        self.grid[i][j] = 0
+        return user_can_play
+

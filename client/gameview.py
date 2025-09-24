@@ -34,6 +34,7 @@ class GameView(arcade.View):
         """ Set up the game and initialize the variables. """
         # Sprite lists
         self.board = Board()
+        self.board.check_possible_moves(self.current_player)
 
     def on_draw(self):
         """
@@ -81,3 +82,7 @@ class GameView(arcade.View):
             self.board.grid[indexY][indexX] = Stone(color, centerX, centerY)
             self.board.flip_stones(indexX, indexY, moves, self.current_player)
             self.current_player = 2 if self.current_player == 1 else 1
+            can_continue = self.board.check_possible_moves(self.current_player)
+            while can_continue == False:
+                  self.board.flip_stones(indexX, indexY, moves, self.current_player)
+                  can_continue = self.board.check_possible_moves(self.current_player)
