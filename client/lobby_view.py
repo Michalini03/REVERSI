@@ -1,6 +1,6 @@
 import arcade
 import arcade.gui
-from client.game_view import GameView
+from game_view import GameView
 
 class LobbyView(arcade.View):
     """

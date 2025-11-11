@@ -9,6 +9,7 @@ WINDOW_HEIGHT = 720
 BOARD_SIZE = 8
 # --- New constant for the UI sidebar ---
 UI_WIDTH = WINDOW_WIDTH - GAME_WIDTH  # This is 200px
+RIGHT_MARGIN = UI_WIDTH // 10
 
 
 class GameView(arcade.View):
@@ -205,8 +206,8 @@ class GameView(arcade.View):
         # Use UI_WIDTH with a small margin (e.g., 180)
         ui_box = arcade.gui.UIBoxLayout(
             vertical=True,
-            width=UI_WIDTH - 20, # 180
-            space_between=20
+            width=UI_WIDTH - RIGHT_MARGIN, # 180
+            space_between = RIGHT_MARGIN
         )
 
         # --- Player 1 UI (Black) ---
@@ -228,8 +229,8 @@ class GameView(arcade.View):
             child=ui_box,
             anchor_x="right",
             anchor_y="top",
-            align_x=-20, # Center in the sidebar
-            align_y=-20  # 20px margin from the top
+            align_x=-RIGHT_MARGIN, # Center in the sidebar
+            align_y=-RIGHT_MARGIN  # 20px margin from the top
         )
 
         # Add the anchor layout to the manager

@@ -8,6 +8,7 @@ Semestral work for class 'Introduction to computer network'
     sudo apt install python3.11-venv
     python3 -m venv .venv
     - runs virtual enviroment: source .venv/bin/activate
+    
 - Arcade: pip install arcade
 
 - Save requirements: pip freeze > requirements.txt
