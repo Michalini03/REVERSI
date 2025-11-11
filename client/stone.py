@@ -1,8 +1,7 @@
 import arcade
 from arcade.shape_list import create_ellipse_filled
 
-WINDOW_WIDTH = 1280
-
+GAME_WIDTH = 900
 WINDOW_HEIGHT = 720
 BOARD_SIZE = 8
 
@@ -15,7 +14,7 @@ class Stone():
         self.center_y = position_y
         self.color = color
         self.id = 1 if color == arcade.color.BLACK else 2
-        self.width = (WINDOW_WIDTH / BOARD_SIZE) * 0.8
+        self.width = (GAME_WIDTH / BOARD_SIZE) * 0.8
         self.height = (WINDOW_HEIGHT / BOARD_SIZE) * 0.8
 
     def draw(self):

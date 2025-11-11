@@ -1,5 +1,8 @@
 import arcade
-from gameview import GameView
+import threading
+from client.game_view import GameView
+from client.lobby_view import LobbyView
+from server_handler import server_communication_loop
 
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
@@ -13,8 +16,11 @@ def main():
     window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
 
     # Create and setup the GameView
-    game = GameView()
-    game.setup()
+    game = LobbyView()
+    
+    # Start the server communication thread
+    server_thread = threading.Thread(target=server_communication_loop, daemon=True)
+    server_thread.start()
 
     # Show GameView on screen
     window.show_view(game)

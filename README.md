@@ -1,4 +1,4 @@
-# BATTLESHIP
+# REVERSI
 Semestral work for class 'Introduction to computer network'
 
 

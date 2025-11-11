@@ -3,7 +3,7 @@ from stone import Stone
 import arcade
 
 BOARD_SIZE = 8
-WINDOW_WIDTH = 1280
+GAME_WIDTH = 900
 WINDOW_HEIGHT = 720
 
 class Board(ShapeElementList):
@@ -18,7 +18,7 @@ class Board(ShapeElementList):
     def create_walls(self):
         """Create wall shapes based on the grid"""
         wall_color = arcade.color.BLACK
-        wall_width = WINDOW_WIDTH / BOARD_SIZE
+        wall_width = GAME_WIDTH / BOARD_SIZE
         wall_height = WINDOW_HEIGHT / BOARD_SIZE
 
         for row in range(BOARD_SIZE):
@@ -39,7 +39,7 @@ class Board(ShapeElementList):
         ]
 
         for row, col, color in positions:
-            posX = (col * (WINDOW_WIDTH / BOARD_SIZE)) + (WINDOW_WIDTH / BOARD_SIZE) / 2
+            posX = (col * (GAME_WIDTH / BOARD_SIZE)) + (GAME_WIDTH / BOARD_SIZE) / 2
             posY = (row * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
             self.grid[row][col] = Stone(color, posX, posY)
 
@@ -51,9 +51,9 @@ class Board(ShapeElementList):
                 if isinstance(self.grid[row][col], Stone):
                     self.grid[row][col].draw()
                 elif self.grid[row][col] == -1:
-                    centerX = (row * (WINDOW_WIDTH / BOARD_SIZE)) + (WINDOW_WIDTH / BOARD_SIZE) / 2
+                    centerX = (row * (GAME_WIDTH / BOARD_SIZE)) + (GAME_WIDTH / BOARD_SIZE) / 2
                     centerY = (col * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
-                    width = (WINDOW_WIDTH / BOARD_SIZE) * 0.6
+                    width = (GAME_WIDTH / BOARD_SIZE) * 0.6
                     height = (WINDOW_HEIGHT / BOARD_SIZE) * 0.6
                     create_ellipse_filled(centerX, centerY, width, height, arcade.color.ASH_GREY).draw()
 
@@ -134,4 +134,13 @@ class Board(ShapeElementList):
                     else:
                         self.grid[i][j] = 0
         return user_can_play
+    
+    def get_score(self, player_id: int) -> int:
+        """Calculate and return the score for the given player."""
+        score = 0
+        for row in self.grid:
+            for cell in row:
+                if isinstance(cell, Stone) and cell.id == player_id:
+                    score += 1
+        return score
 
