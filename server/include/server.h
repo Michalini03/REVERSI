@@ -1,5 +1,4 @@
-#ifndef SERVER_H
-#define SERVER_H
+#pragma once
 
 /**
  * @brief Starts the TCP server.
@@ -8,5 +7,3 @@
  * to accept and handle clients one by one.
  */
 void startServer();
-
-#endif // SERVER_H

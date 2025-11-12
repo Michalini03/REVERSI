@@ -10,7 +10,5 @@ int main() {
         return 1;
     }
     
-    // The program will only reach this point if startServer() exits,
-    // which it isn't designed to do in its current infinite loop.
     return 0;
 }
