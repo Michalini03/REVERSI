@@ -5,9 +5,13 @@
 #include <sys/socket.h>  // For socket functions (socket, bind, listen, accept)
 #include <netinet/in.h>  // For sockaddr_in structure and INADDR_ANY
 #include <unistd.h>      // For close() function
+#include <sstream>       // For std::stringstream (you added this)
+#include <vector>        // For std::vector (needed for parsing)
 
-// Define a port number for the server
+// Constants
 #define PORT 9999
+#define LOBBY_COUNT 5
+#define PREFIX_GAME "REV"
 
 void startServer() {
     int server_fd, new_socket;
@@ -16,7 +20,6 @@ void startServer() {
     int addrlen = sizeof(address);
     char buffer[1024] = {0}; // Buffer to store received data
 
-    // --- 1. Create a socket ---
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         exit(EXIT_FAILURE);
@@ -63,13 +66,10 @@ void startServer() {
 
         std::cout << "Connection accepted!" << std::endl;
 
-        // --- 4b. Receive data from the client ---
-        // We'll use a loop here to keep handling messages until the client disconnects
+
         while(true) {
             // Clear the buffer
             memset(buffer, 0, 1024);
-
-            // Read data from the client into the buffer
             int valread = read(new_socket, buffer, 1024);
             
             if (valread <= 0) {
@@ -80,19 +80,62 @@ void startServer() {
                 std::cout << "Client said: " << buffer << std::endl;
             }
 
-            // --- 4c. Send a response to the client ---
-            const char *hello = "Message received!";
-            send(new_socket, hello, strlen(hello), 0);
-            std::cout << "Response sent to client." << std::endl;
+            handleMessage(new_socket, buffer);
         }
 
         // --- 4d. Close the client-specific socket ---
         // We're done with this client, close their socket and loop back to accept()
         close(new_socket);
     }
-
-    // --- 5. Close the main listening socket ---
-    // This code is now unreachable because of the while(true) loop,
-    // but it's good practice. A real server would have a shutdown signal.
     close(server_fd);
+}
+
+void handleMessage(int client_socket, const char* message) {
+    // For now, just echo the message back to the client
+    std::string messagePrefix = "REV";
+    std::string messageStr(message);
+
+    if (messageStr.substr(0, messagePrefix.size()).compare(messagePrefix) == 0) {
+        // Strings are EQUAL (prefix IS "REV")
+        std::cout << "Received a game-related message." << std::endl;
+        std::stringstream ss(messageStr);
+
+        std::string command;
+        std::string prefix;
+        ss >> prefix;
+        ss >> command;
+
+        if (command == "MOVE") {
+            int x, y;
+            ss >> x >> y;
+            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
+            // Here you would add logic to update the game state
+        }
+        else if (command == "CREATE") {
+            std::cout << "Processing CREATE command." << std::endl;
+            // Here you would add logic to create a new game
+            if(sendLobbyList(client_socket) == 0) {
+                std::cout << "Sent updated lobby list to client." << std::endl;
+            } else {
+                std::cout << "Failed to send lobby list to client." << std::endl;
+            }
+        }
+        else {
+            std::cout << "Unknown game command: " << command << std::endl;
+        }
+    } else {
+        // Strings are NOT equal (no prefix, must be lobby message)
+        std::cout << "Received a lobby-related message." << std::endl;
+    }
+
+    std::cout << "Handling message: " << messageStr << std::endl;
+    send(client_socket, message, strlen(message), 0);
+}
+
+int sendLobbyList(int client_socket) {
+    std::string prefix(PREFIX_GAME);
+    std::string lobbyList = prefix + " LOBBY " + std::to_string(LOBBY_COUNT) + "\n";
+    
+    send(client_socket, lobbyList.c_str(), lobbyList.size(), 0);
+    return 0;
 }

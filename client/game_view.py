@@ -107,7 +107,6 @@ class GameView(arcade.View):
             
         # --- ADDED: Check if the click is outside the game board ---
         if x > GAME_WIDTH:
-            print("Clicked on UI area, not game board.")
             return
 
         if button == arcade.MOUSE_BUTTON_LEFT:
@@ -118,7 +117,6 @@ class GameView(arcade.View):
             if not is_valid:
                 return
 
-            print(f"Click coordinates: ({x}, {y})")
             centerX = (indexX * (GAME_WIDTH / BOARD_SIZE)) + (GAME_WIDTH / BOARD_SIZE) / 2
             centerY = (indexY * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
 
