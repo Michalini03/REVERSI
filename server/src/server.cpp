@@ -25,12 +25,6 @@ void startServer() {
         exit(EXIT_FAILURE);
     }
 
-    // --- (Optional) Set socket options ---
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
-
     // --- 2. Bind the socket to an address and port ---
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -87,6 +81,8 @@ void startServer() {
         // We're done with this client, close their socket and loop back to accept()
         close(new_socket);
     }
+
+    // --- 5. Close the main listening socket ---
     close(server_fd);
 }
 

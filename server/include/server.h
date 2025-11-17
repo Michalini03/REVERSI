@@ -1,5 +1,4 @@
-#ifndef SERVER_H
-#define SERVER_H
+#pragma once
 
 /**
  * @brief Starts the TCP server.
@@ -22,5 +21,3 @@ void handleMessage(int client_socket, const char* message);
  * @return 0 on success, non-zero on failure.
  */
 int sendLobbyList(int client_socket);
-
-#endif // SERVER_H
