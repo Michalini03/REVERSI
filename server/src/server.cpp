@@ -1,4 +1,5 @@
 #include "../include/server.h"      // Include the header file we will create
+#include "../include/lobby.h"       // Include the lobby header
 #include <iostream>      // For standard I/O operations (cout, cerr)
 #include <string>        // For using std::string
 #include <cstring>       // For C-style string functions (memset)
@@ -7,11 +8,17 @@
 #include <unistd.h>      // For close() function
 #include <sstream>       // For std::stringstream (you added this)
 #include <vector>        // For std::vector (needed for parsing)
+#include <thread>
+#include <mutex>
 
 // Constants
 #define PORT 9999
 #define LOBBY_COUNT 5
 #define PREFIX_GAME "REV"
+
+// Global variables
+std::vector<Lobby> lobbies(LOBBY_COUNT); 
+std::vector<int> client_sockets; 
 
 void startServer() {
     int server_fd, new_socket;
@@ -19,6 +26,12 @@ void startServer() {
     int opt = 1;
     int addrlen = sizeof(address);
     char buffer[1024] = {0}; // Buffer to store received data
+    
+    int[] joinedPlayers;
+
+    for(int i=0; i<LOBBY_COUNT; i++) {
+        lobbies[i] = Lobby(i);
+    }
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
@@ -46,44 +59,60 @@ void startServer() {
 
     std::cout << "Server is listening on port " << PORT << "..." << std::endl;
 
-    // --- 4. Start the infinite loop to accept clients ---
     while(true) {
-        std::cout << "\nWaiting for a new connection..." << std::endl;
 
-        // --- 4a. Accept a new connection ---
-        // This is a blocking call. The program will wait here until a client connects.
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
             perror("accept failed");
             // Don't exit, just log the error and continue listening
             continue; 
         }
 
-        std::cout << "Connection accepted!" << std::endl;
-
-
-        while(true) {
-            // Clear the buffer
-            memset(buffer, 0, 1024);
-            int valread = read(new_socket, buffer, 1024);
-            
-            if (valread <= 0) {
-                // If read returns 0 or -1, the client has disconnected or an error occurred
-                std::cout << "Client disconnected." << std::endl;
-                break; // Exit the inner loop
-            } else {
-                std::cout << "Client said: " << buffer << std::endl;
-            }
-
-            handleMessage(new_socket, buffer);
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            std::cout << "Connection accepted!" << std::endl;
+            client_sockets.push_back(new_socket);
         }
 
-        // --- 4d. Close the client-specific socket ---
-        // We're done with this client, close their socket and loop back to accept()
-        close(new_socket);
+        std::thread client_thread(handleClientLogic, new_socket);
+        client_thread.detach(); 
     }
 
-    // --- 5. Close the main listening socket ---
     close(server_fd);
+}
+
+
+void handleClientLogic(int client_socket) {
+    char buffer[1024] = {0};
+
+    while(true) {
+        memset(buffer, 0, 1024);
+        int valread = read(client_socket, buffer, 1024);
+        
+        if (valread <= 0) {
+            std::cout << "Client " << client_socket << " disconnected." << std::endl;
+            
+            // TODO: Pause game if in a lobby
+            {
+                std::lock_guard<std::mutex> lock(lobbies_mutex);
+                for (auto &lobby : lobbies) {
+                    if (lobby.player1_socket == client_socket) lobby.player1_socket = -1;
+                    if (lobby.player2_socket == client_socket) lobby.player2_socket = -1;
+                }
+            }
+            break; 
+        }
+
+        handleMessage(client_socket, buffer);
+    }
+
+    close(client_socket);
+    
+    // Remove from global list
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex);
+        auto it = std::remove(client_sockets.begin(), client_sockets.end(), client_socket);
+        client_sockets.erase(it, client_sockets.end());
+    }
 }
 
 void handleMessage(int client_socket, const char* message) {
@@ -116,6 +145,15 @@ void handleMessage(int client_socket, const char* message) {
                 std::cout << "Failed to send lobby list to client." << std::endl;
             }
         }
+        else if (command == "JOIN") {
+            int result;
+            int lobbyId;
+            ss >> lobbyId;
+            std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
+
+            result = handleLobbyJoin(client_socket, lobbyId);
+            // Here you would add logic to join the specified lobby
+        }
         else {
             std::cout << "Unknown game command: " << command << std::endl;
         }
@@ -134,4 +172,14 @@ int sendLobbyList(int client_socket) {
     
     send(client_socket, lobbyList.c_str(), lobbyList.size(), 0);
     return 0;
+}
+
+int handleLobbyJoin(int client_socket, int lobbyId) {
+    if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
+        return -1; // Invalid lobby ID
+    }
+
+    Lobby &lobby = lobbies[lobbyId];
+    int result = lobby.appendPlayer(client_socket);
+    return result; // 1 for player 1, 2 for player 2, 3 for full, -1 for error
 }

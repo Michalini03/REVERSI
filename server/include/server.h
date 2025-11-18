@@ -9,6 +9,12 @@
 void startServer();
 
 /**
+ * @brief Handles the logic for a connected client.
+ * @param client_socket The file descriptor for the client's socket.
+ */
+void handleClientLogic(int client_socket);
+
+/**
  * @brief Handles an incoming message from a client.
  * @param client_socket The file descriptor for the client's socket.
  * @param message The null-terminated message received from the client.
