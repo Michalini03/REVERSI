@@ -27,3 +27,11 @@ void handleMessage(int client_socket, const char* message);
  * @return 0 on success, non-zero on failure.
  */
 int sendLobbyList(int client_socket);
+
+/**
+ * @brief Joins client socket to lobby or inform user about fully lobby
+ * @param lient_socket The file descriptor for the client's socket.
+ * @param lobbyId id of lobby (index in vector)
+ * @param 1 - user is player1, 2 - user is player2, 3 - lobby is full, 0 - error
+*/
+int handleLobbyJoin(int client_socket, int lobbyId);

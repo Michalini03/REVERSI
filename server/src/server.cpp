@@ -8,6 +8,7 @@
 #include <unistd.h>      // For close() function
 #include <sstream>       // For std::stringstream (you added this)
 #include <vector>        // For std::vector (needed for parsing)
+#include <algorithm>
 #include <thread>
 #include <mutex>
 
@@ -17,8 +18,11 @@
 #define PREFIX_GAME "REV"
 
 // Global variables
-std::vector<Lobby> lobbies(LOBBY_COUNT); 
+std::vector<Lobby> lobbies; 
 std::vector<int> client_sockets; 
+
+std::mutex clients_mutex;
+std::mutex lobbies_mutex;
 
 void startServer() {
     int server_fd, new_socket;
@@ -27,10 +31,8 @@ void startServer() {
     int addrlen = sizeof(address);
     char buffer[1024] = {0}; // Buffer to store received data
     
-    int[] joinedPlayers;
-
-    for(int i=0; i<LOBBY_COUNT; i++) {
-        lobbies[i] = Lobby(i);
+    for (int i = 0; i < LOBBY_COUNT; ++i) {
+        lobbies.emplace_back(i);
     }
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -38,7 +40,7 @@ void startServer() {
         exit(EXIT_FAILURE);
     }
 
-    // --- 2. Bind the socket to an address and port ---
+    // --- 2. Bind the socket to an address and port --
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -94,10 +96,10 @@ void handleClientLogic(int client_socket) {
             // TODO: Pause game if in a lobby
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
-                for (auto &lobby : lobbies) {
+                /*for (auto &lobby : lobbies) {
                     if (lobby.player1_socket == client_socket) lobby.player1_socket = -1;
                     if (lobby.player2_socket == client_socket) lobby.player2_socket = -1;
-                }
+                }*/
             }
             break; 
         }
@@ -110,8 +112,10 @@ void handleClientLogic(int client_socket) {
     // Remove from global list
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
-        auto it = std::remove(client_sockets.begin(), client_sockets.end(), client_socket);
-        client_sockets.erase(it, client_sockets.end());
+        auto it = std::find(client_sockets.begin(), client_sockets.end(), client_socket);
+        if (it != client_sockets.end()) {
+            client_sockets.erase(it);  // erase the single element
+        }
     }
 }
 
