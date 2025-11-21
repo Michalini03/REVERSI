@@ -17,7 +17,7 @@ class GameView(arcade.View):
     Main application class.
     """
 
-    def __init__(self, username_one: str = "Player 1", username_two: str = "Player 2"):
+    def __init__(self, client_socket, server_queue, current_player, username_one: str = "Player 1", username_two: str = "Player 2"):
         """
         Initializer
         """
@@ -28,11 +28,14 @@ class GameView(arcade.View):
         self.manager = arcade.gui.UIManager()
 
         # Variables that will hold sprite lists
-        self.current_player = 1
-        
+        self.current_player = current_player
+
         # --- FIX: Save both usernames ---
         self.username_one = username_one
         self.username_two = username_two
+
+        self.client_socket = client_socket
+        self.server_queue = server_queue
 
         # --- Store UI labels to update them later ---
         self.player1_score_label = None
@@ -50,7 +53,7 @@ class GameView(arcade.View):
         # Sprite lists
         self.board = Board()
         self.board.check_possible_moves(self.current_player)
-        
+
         # --- Call the UI setup ---
         self.prepare_ui()
 

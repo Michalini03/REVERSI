@@ -109,5 +109,26 @@ class LobbyListView(arcade.View):
             while not self.server_queue.empty():
                 message = self.server_queue.get()
                 print(f"[LobbyListView] Message from server: {message}")
+
+                params = message.split()
+                if params[0] == GAME_PREFIX:
+                    command = params[1]
+                    if command == "CONNECT":
+                        player_id = int(params[2])
+                        if player_id == 3:
+                            print("[LobbyListView] Lobby is full. Cannot join.")
+                            return
+
+                        print(f"[LobbyListView] Connected to lobby as player {player_id}")
+
+                    if command == "START":
+                        print("[LobbyListView] Game is starting...")
+                        who_starts = int(params[2])
+                        player_name = params[3]
+                        opponent_name = params[4]
+                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name)
+                        self.window.show_view(game_view)
+                else:
+                    print("[LobbyListView] Unknown message prefix")
         except Exception as e:
             print(f"[LobbyListView] Error processing queue: {e}")

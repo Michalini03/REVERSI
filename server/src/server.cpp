@@ -1,5 +1,6 @@
 #include "../include/server.h"      // Include the header file we will create
 #include "../include/lobby.h"       // Include the lobby header
+#include "../include/player.h"      // Include the player header
 #include <iostream>      // For standard I/O operations (cout, cerr)
 #include <string>        // For using std::string
 #include <cstring>       // For C-style string functions (memset)
@@ -17,12 +18,17 @@
 #define LOBBY_COUNT 5
 #define PREFIX_GAME "REV"
 
+#define PAUSE_STATUS 3
+#define ENDED_STATUS 0
+
 // Global variables
 std::vector<Lobby> lobbies; 
 std::vector<int> client_sockets; 
+std::vector<Player> players;
 
 std::mutex clients_mutex;
 std::mutex lobbies_mutex;
+std::mutex players_mutex;
 
 void startServer() {
     int server_fd, new_socket;
@@ -85,6 +91,16 @@ void startServer() {
 
 void handleClientLogic(int client_socket) {
     char buffer[1024] = {0};
+    int player_id;
+
+    // Create new player
+    {
+        std::lock_guard<std::mutex> lock(players_mutex);
+        Player new_player(client_socket, players.size());
+        player_id = new_player.id;
+        players.push_back(new_player);
+        std::cout << "[SERVER] New player created with socket " << client_socket << std::endl;
+    }
 
     while(true) {
         memset(buffer, 0, 1024);
@@ -96,15 +112,15 @@ void handleClientLogic(int client_socket) {
             // TODO: Pause game if in a lobby
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
-                /*for (auto &lobby : lobbies) {
-                    if (lobby.player1_socket == client_socket) lobby.player1_socket = -1;
-                    if (lobby.player2_socket == client_socket) lobby.player2_socket = -1;
-                }*/
+                for (auto &lobby : lobbies) {
+                    if (lobby.getPlayerSocket1() == client_socket || lobby.getPlayerSocket2() == client_socket) 
+                        lobby.removePlayer(client_socket);
+                }
             }
             break; 
         }
 
-        handleMessage(client_socket, buffer);
+        handleMessage(client_socket, player_id, buffer);
     }
 
     close(client_socket);
@@ -119,7 +135,7 @@ void handleClientLogic(int client_socket) {
     }
 }
 
-void handleMessage(int client_socket, const char* message) {
+void handleMessage(int client_socket, int player_id, const char* message) {
     // For now, just echo the message back to the client
     std::string messagePrefix = "REV";
     std::string messageStr(message);
@@ -141,12 +157,34 @@ void handleMessage(int client_socket, const char* message) {
             // Here you would add logic to update the game state
         }
         else if (command == "CREATE") {
+            std::string username;
+            ss >> username;
+
+            std::lock_guard<std::mutex> lock(players_mutex);
+            players[player_id].appendName(username);
+
             std::cout << "Processing CREATE command." << std::endl;
+
+            // Look if user is not in game already
+            {
+                std::lock_guard<std::mutex> lock(lobbies_mutex);
+                for (auto &lobby : lobbies) {
+                    if (lobby.reconnectUser(players[player_id]) != -1) {
+                        std::cout << "[SERVER] User already connected to a lobby." << std::endl;
+                        if (lobby.getStatus() == PAUSE_STATUS) {
+                            // Resume game
+                            std::cout << "[SERVER] Resuming paused game for user." << std::endl;
+                        }
+                    }
+                }
+            }
+
             // Here you would add logic to create a new game
             if(sendLobbyList(client_socket) == 0) {
-                std::cout << "Sent updated lobby list to client." << std::endl;
+                std::cout << "[SERVER] Sent updated lobby list to client." << std::endl;
+                // return username;
             } else {
-                std::cout << "Failed to send lobby list to client." << std::endl;
+                std::cout << "[ERROR] Failed to send lobby list to client." << std::endl;
             }
         }
         else if (command == "JOIN") {
@@ -155,12 +193,13 @@ void handleMessage(int client_socket, const char* message) {
             ss >> lobbyId;
             std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
 
-            result = handleLobbyJoin(client_socket, lobbyId);
+            result = handleLobbyJoin(client_socket, player_id, lobbyId);
             // Here you would add logic to join the specified lobby
             if(result == 1) {
                 std::cout << "[SERVER] Client joined as Player 1 in lobby " << lobbyId << std::endl;
             } else if(result == 2) {
                 std::cout << "[SERVER] Client joined as Player 2 in lobby " << lobbyId << std::endl;
+                startGame(lobbyId);
             } else if(result == 3) {
                 std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
             } else {
@@ -180,8 +219,7 @@ void handleMessage(int client_socket, const char* message) {
             std::cout << "Unknown game command: " << command << std::endl;
         }
     } else {
-        // Strings are NOT equal (no prefix, must be lobby message)
-        std::cout << "Received a lobby-related message." << std::endl;
+        return;
     }
 
     std::cout << "Handling message: " << messageStr << std::endl;
@@ -196,9 +234,11 @@ int sendConnectInfo(int client_socket, int playerNumber) {
     return 0;
 }
 
-int sendStartingPlayerInfo(int client_socket, int playerNumber) {
+int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int playerNumber) {
     std::string prefix(PREFIX_GAME);
-    std::string message = prefix + " START " + std::to_string(playerNumber) + "\n";
+    std::string message = prefix + " START " + std::to_string(playerNumber);
+    message += " " + player1 + " " + player2;
+    message += "\n";
     
     send(client_socket, message.c_str(), message.size(), 0);
     return 0;
@@ -212,17 +252,57 @@ int sendLobbyList(int client_socket) {
     return 0;
 }
 
-int handleLobbyJoin(int client_socket, int lobbyId) {
+int handleLobbyJoin(int client_socket, int player_id, int lobbyId) {
     if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
         return -1; // Invalid lobby ID
     }
 
-    Lobby &lobby = lobbies[lobbyId];
-    int result = lobby.appendPlayer(client_socket);
-
-    if(result > 0 {
-        sendConnectInfo(client_socket, result);
-    })
+    std::lock_guard<std::mutex> lock(lobbies_mutex);
+    std::lock_guard<std::mutex> lock2(players_mutex);
+    for (auto &lobby : lobbies) {
+        if (lobby.isUserConnected(client_socket)) {
+            std::cout << "[SERVER] User already connected to a lobby." << std::endl;
+            return -1;
+        }
+    }
     
-    return result; // 1 for player 1, 2 for player 2, 3 for full, -1 for error
+    Lobby &lobby = lobbies[lobbyId];
+    Player* player = &players[player_id];
+    int result = lobby.appendPlayer(player);
+
+    if(result > 0) {
+        sendConnectInfo(client_socket, result);
+    }
+    
+    return result;
+}
+
+int handleReconecting() {
+    return 0;
+}
+
+
+
+void startGame(int lobbyIndex) {
+    std::lock_guard<std::mutex> lock(lobbies_mutex);
+    if(lobbyIndex < 0 || lobbyIndex >= LOBBY_COUNT) return;
+
+    Lobby &lobby = lobbies[lobbyIndex];
+    lobby.setStatus(1); 
+
+    // Use Safe Getters to prevent SegFault
+    std::string p1Name = lobby.getPlayer1Username();
+    std::string p2Name = lobby.getPlayer2Username();
+    int p1Socket = lobby.getPlayerSocket1();
+    int p2Socket = lobby.getPlayerSocket2();
+
+    std::cout << "[LOBBY " << (lobbyIndex+1) << "] Game started between " 
+              << p1Name << " and " << p2Name << std::endl;
+    std::cout << "[LOBBY " << (lobbyIndex+1) << "] Player 1 socket: " << p1Socket << ", Player 2 socket: " << p2Socket << std::endl;
+
+    // Send info to Player 1 (You are P1, Opponent is P2)
+    sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1); 
+    
+    // Send info to Player 2 (You are P2, Opponent is P1)
+    sendStartingPlayerInfo(p2Socket, p2Name, p1Name, 1); 
 }

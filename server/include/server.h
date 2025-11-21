@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 /**
  * @brief Starts the TCP server.
@@ -7,6 +8,12 @@
  * to accept and handle clients one by one.
  */
 void startServer();
+
+/**
+ * @brief Starts the game for the specified lobby.
+ * @param lobbyId The ID of the lobby to start the game in.
+ */
+void startGame(int lobbyId);
 
 /**
  * @brief Handles the logic for a connected client.
@@ -19,7 +26,7 @@ void handleClientLogic(int client_socket);
  * @param client_socket The file descriptor for the client's socket.
  * @param message The null-terminated message received from the client.
  */
-void handleMessage(int client_socket, const char* message);
+void handleMessage(int client_socket, int player_id, const char* message);
 
 /**
  * @brief Sends the list of available lobbies to the client.
@@ -30,7 +37,7 @@ int sendLobbyList(int client_socket);
 
 int sendConnectInfo(int client_socket, int player_id);
 
-int sendStartingPlayerInfo(int client_socket, int player_id);
+int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int player_id);
 
 /**
  * @brief Joins client socket to lobby or inform user about fully lobby
@@ -38,4 +45,7 @@ int sendStartingPlayerInfo(int client_socket, int player_id);
  * @param lobbyId id of lobby (index in vector)
  * @param 1 - user is player1, 2 - user is player2, 3 - lobby is full, 0 - error
 */
-int handleLobbyJoin(int client_socket, int lobbyId);
+int handleLobbyJoin(int client_socket, int player_id, int lobbyId);
+
+
+int handleReconecting();
