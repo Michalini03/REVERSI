@@ -28,6 +28,10 @@ void handleMessage(int client_socket, const char* message);
  */
 int sendLobbyList(int client_socket);
 
+int sendConnectInfo(int client_socket, int player_id);
+
+int sendStartingPlayerInfo(int client_socket, int player_id);
+
 /**
  * @brief Joins client socket to lobby or inform user about fully lobby
  * @param lient_socket The file descriptor for the client's socket.

@@ -157,6 +157,24 @@ void handleMessage(int client_socket, const char* message) {
 
             result = handleLobbyJoin(client_socket, lobbyId);
             // Here you would add logic to join the specified lobby
+            if(result == 1) {
+                std::cout << "[SERVER] Client joined as Player 1 in lobby " << lobbyId << std::endl;
+            } else if(result == 2) {
+                std::cout << "[SERVER] Client joined as Player 2 in lobby " << lobbyId << std::endl;
+            } else if(result == 3) {
+                std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
+            } else {
+                std::cout << "[SERVER] Error joining lobby " << lobbyId << std::endl;
+            }
+
+
+
+        }
+        else if (command == "MOVE") {
+            int x, y;
+            ss >> x >> y;
+            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
+            // Here you would add logic to update the game state
         }
         else {
             std::cout << "Unknown game command: " << command << std::endl;
@@ -168,6 +186,22 @@ void handleMessage(int client_socket, const char* message) {
 
     std::cout << "Handling message: " << messageStr << std::endl;
     send(client_socket, message, strlen(message), 0);
+}
+
+int sendConnectInfo(int client_socket, int playerNumber) {
+    std::string prefix(PREFIX_GAME);
+    std::string message = prefix + " CONNECT " + std::to_string(playerNumber) + "\n";
+    
+    send(client_socket, message.c_str(), message.size(), 0);
+    return 0;
+}
+
+int sendStartingPlayerInfo(int client_socket, int playerNumber) {
+    std::string prefix(PREFIX_GAME);
+    std::string message = prefix + " START " + std::to_string(playerNumber) + "\n";
+    
+    send(client_socket, message.c_str(), message.size(), 0);
+    return 0;
 }
 
 int sendLobbyList(int client_socket) {
@@ -185,5 +219,10 @@ int handleLobbyJoin(int client_socket, int lobbyId) {
 
     Lobby &lobby = lobbies[lobbyId];
     int result = lobby.appendPlayer(client_socket);
+
+    if(result > 0 {
+        sendConnectInfo(client_socket, result);
+    })
+    
     return result; // 1 for player 1, 2 for player 2, 3 for full, -1 for error
 }
