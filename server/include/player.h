@@ -4,10 +4,9 @@
 struct Player {
     int socket;
     std::string username;
-    int id;
 
     // Constructor for easy creation
-    Player(int s, int id) : socket(s), id(id) {}
+    Player(int s) : socket(s) {}
 
     void appendName(const std::string& name) {
         username = name;

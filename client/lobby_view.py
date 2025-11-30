@@ -7,7 +7,7 @@ from lobby_list_view import LobbyListView
 
 GAME_PREFIX = "REV"
 DEFAULT_IP = "127.0.0.1"
-DEFAULT_PORT = 5050
+DEFAULT_PORT = 9999
 
 
 class QuietInputText(arcade.gui.UIInputText):
@@ -149,7 +149,7 @@ class LobbyView(arcade.View):
         
         # Send join message
         try:
-            message = f"{GAME_PREFIX} CREATE {self.username}"
+            message = f"{GAME_PREFIX} CREATE {self.username}\n"
             self.client_socket.sendall(message.encode('utf-8'))
         except Exception as e:
             self.show_error_popup(f"Socket Error: {e}")

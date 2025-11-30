@@ -15,6 +15,7 @@
 Lobby::Lobby(int id) {
       this->lobbyId = id;
       this->status = 0;
+      this->statusBeforePause = 0;
       this->player1 = nullptr;
       this->player2 = nullptr;
       
@@ -24,10 +25,10 @@ Lobby::Lobby(int id) {
             }
       }
 
-      board[3][3] = PLAYER_TWO;
-      board[3][4] = PLAYER_ONE;
-      board[4][3] = PLAYER_ONE;
-      board[4][4] = PLAYER_TWO;
+      board[3][3] = PLAYER_ONE; // Black
+      board[4][4] = PLAYER_ONE; // Black
+      board[3][4] = PLAYER_TWO; // White
+      board[4][3] = PLAYER_TWO; // White
 
       getAvaiableMoves(board, PLAYER_ONE);
 }
@@ -107,10 +108,12 @@ int Lobby::reconnectUser(Player new_player) {
       if (player1 != nullptr && player1->username == new_player.username) {
             player1->socket = new_player.socket;
             std::cout << "[LOBBY " << lobbyId << "] Player 1 reconnected with socket " << new_player.socket << std::endl;
+            setStatus(statusBeforePause);
             return lobbyId;
       } else if (player2 != nullptr && player2->username == new_player.username) {
             player2->socket = new_player.socket;
             std::cout << "[LOBBY " << lobbyId << "] Player 2 reconnected with socket " << new_player.socket << std::endl;
+            setStatus(statusBeforePause);
             return lobbyId;
       }
 
@@ -118,20 +121,26 @@ int Lobby::reconnectUser(Player new_player) {
 }
 
 void Lobby::removePlayer(int socket) {
-      if (status == ENDED_STATUS) {
+      if (status == ENDED_STATUS || status == PAUSE_STATUS) {
             if (player1 != nullptr && player1->socket == socket) {
-                  delete player1;
                   player1 = nullptr;
                   std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected." << std::endl;
             }
             else if (player2 != nullptr && player2->socket == socket) {
-                  delete player2;
                   player2 = nullptr;
                   std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected." << std::endl;
             }
-      }
 
+            bool p1Gone = (player1 == nullptr || player1->socket == -1);
+            
+            bool p2Gone = (player2 == nullptr || player2->socket == -1);
+
+            if (p1Gone && p2Gone) {
+                  resetLobby();
+            }
+      }
       else if (status == 1 || status == 2) {
+            statusBeforePause = status;
             status = PAUSE_STATUS;
             std::cout << "[LOBBY " << lobbyId << "] Game paused due to player disconnection." << std::endl;
             if (player1->socket == socket) {
@@ -143,6 +152,8 @@ void Lobby::removePlayer(int socket) {
                   std::cout << "[LOBBY " << lobbyId << " ERROR] Player 2 disconnected." << std::endl;
             }
       }
+
+      
 }
 
 
@@ -172,11 +183,34 @@ int Lobby::canUserPlay(int client_socket) {
 }
 
 bool Lobby::validateAndApplyMove(int x, int y, int player) {
-      if (validateMove(x, y, board, player)) {
-            board[y][x] = player;
-            // After a valid move, recalculate possible moves for the next turn
-            getAvaiableMoves(board, (player == PLAYER_ONE) ? PLAYER_TWO : PLAYER_ONE);
+      if (board[y][x] != 3 && board[y][x] != 0) return false;
+      std::cout << "KDE JE CHYBA" << std::endl;
+      if (processMove(x, y, board, player, true)) {
+            
+            getAvaiableMoves(board, (player == 1) ? 2 : 1);
             return true;
       }
-      return false; // Invalid move
+      return false;
+      }
+
+void Lobby::resetLobby() {
+      std::cout << "[LOBBY " << lobbyId << "] Resetting lobby" << std::endl;
+
+      status = 0;
+      statusBeforePause = 0;
+      player1 = nullptr;
+      player2 = nullptr;
+      
+      for (int i = 0; i < 8; ++i) {
+            for (int j = 0; j < 8; ++j) {
+                  board[i][j] = 0;
+            }
+      }
+
+      board[3][3] = PLAYER_ONE; // Black
+      board[4][4] = PLAYER_ONE; // Black
+      board[3][4] = PLAYER_TWO; // White
+      board[4][3] = PLAYER_TWO; // White
+
+      getAvaiableMoves(board, PLAYER_ONE);
 }

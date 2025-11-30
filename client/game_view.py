@@ -44,7 +44,7 @@ class GameView(arcade.View):
         self.player2_score_label = None
 
         # Set up the player info
-        self.board = None
+        self.board = Board()
         self.init_state = init_state
 
         # Set the background color
@@ -56,17 +56,6 @@ class GameView(arcade.View):
         self.board = Board()
         self.prepare_ui()
         
-        params = self.init_state.split()
-        if params[0] == "REV":
-            if params[1] == "STATE":
-                state_string = params[3]
-                self.board.set_state(state_string)
-                
-                if self.player1_score_label:
-                        self.player1_score_label.text = str(params[4])
-                if self.player2_score_label:
-                    self.player2_score_label.text = str(params[5])
-
     # --- ADDED: on_show_view ---
     def on_show_view(self):
         """ This is run when we switch to this view """
@@ -89,7 +78,8 @@ class GameView(arcade.View):
         # This command has to happen before we start drawing
         self.clear()
 
-        self.board.draw()
+        if self.board:
+            self.board.draw()
         self.manager.draw()
         
     def show_server_error_popup(self):
@@ -113,6 +103,27 @@ class GameView(arcade.View):
             pass
         
         self.manager.add(message_box)
+    
+    def show_pause_modal(self, player_name: str):
+        """
+        Shows an Error modal popup using UIMessageBox 
+        """
+        self.manager.focused_element = None 
+        
+        pause_box = arcade.gui.UIMessageBox(
+            width=350,
+            height=200,
+            message_text=f"Player {player_name} was disconnected from the game\nWaiting for reconnection.",
+            buttons=["Leave"]
+        )
+        
+        @pause_box.event("on_action")
+        def on_message_box_close(event):
+            from lobby_list_view import LobbyListView
+            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            pass
+        
+        self.manager.add(pause_box)
 
 
     def on_update(self, delta_time):
@@ -120,9 +131,12 @@ class GameView(arcade.View):
         
         if self.client_socket is None or self.server_queue is None:
             return
-        print("[GameView] Checking server queue for messages...")
+        
         while not self.server_queue.empty():
             message = self.server_queue.get()
+            
+            if message is None or message.strip() == "":
+                    continue
             print(f"[GameView] Message from server: {message}")
             # --- PROCESS SERVER MESSAGES HERE ---
             
@@ -130,24 +144,23 @@ class GameView(arcade.View):
             if params[0] == PREFIX:
                 command = params[1]
                 if command == "STATE":
-                    state_string = " ".join(params[2])
-                    self.board.set_state(state_string)
+                    self.board.set_state(params[2])
                     score1 = params[3]
                     score2 = params[4] 
                     if self.player1_score_label:
                         self.player1_score_label.text = str(score1)
                     if self.player2_score_label:
                         self.player2_score_label.text = str(score2)
-                elif command == "SCORE":
-                    score1 = params[2]
-                    score2 = params[3]
-                    if self.player1_score_label:
-                        self.player1_score_label.text = str(score1)
-                    if self.player2_score_label:
-                        self.player2_score_label.text = str(score2)
-                elif message == "SERVER_DISCONNECT":
+                        
+                    print(self.board)
+                elif command == "SERVER_DISCONNECT":
                     print("[GameView] Disconnected from server.")
                     self.show_server_error_popup()
+                elif command == "DISCONNECT":
+                    player_name = params[2]
+                    self.show_pause_modal()
+                else:
+                    print("[GameView] Unexpected command from server.")
 
     def on_mouse_press(self, x, y, button, key_modifiers):
         """
@@ -164,7 +177,7 @@ class GameView(arcade.View):
 
         if button == arcade.MOUSE_BUTTON_LEFT:
             indexX = int(x // (GAME_WIDTH / BOARD_SIZE))
-            indexY = int(y // (WINDOW_HEIGHT / BOARD_SIZE))
+            indexY = 7 - int(y // (WINDOW_HEIGHT / BOARD_SIZE))
             print(f"[GameView] Mouse clicked at board position: ({indexX}, {indexY})")
             self.send_move(indexX, indexY)
 
@@ -270,6 +283,6 @@ class GameView(arcade.View):
         
     def send_move(self, board_x: int, board_y: int):
         """ Send the player's move to the server """
-        message = f"{PREFIX} MOVE {board_x} {board_y} {self.lobby_id}"
+        message = f"{PREFIX} MOVE {board_x} {board_y} {self.lobby_id}\n"
         print(f"[GameView] Sending move to server: {message}")
         self.client_socket.sendall(message.encode())

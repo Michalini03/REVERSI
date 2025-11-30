@@ -100,8 +100,11 @@ class LobbyListView(arcade.View):
         try:
             while not self.server_queue.empty():
                 message: str = self.server_queue.get()
+                
+                if message is None or message.strip() == "":
+                    continue
+                
                 print(f"[LobbyListView] Message from server: {message}")
-
                 params = message.split()
                 if params[0] == GAME_PREFIX:
                     command = params[1]
@@ -117,13 +120,13 @@ class LobbyListView(arcade.View):
                     if command == "START":
                         print("[LobbyListView] Game is starting...")
                         
-                        _, paramts_state = message.split("\n", 1)
                         who_starts = int(params[2])
                         player_name = params[3]
                         opponent_name = params[4]
                         
-                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, self.lobby_id, paramts_state)
+                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, self.lobby_id)
                         self.window.show_view(game_view)
+                        return
                     if command == "SERVER_DISCONNECT":
                         print("[LobbyListView] Disconnected from server.")
                         self.show_server_error_popup()
@@ -146,7 +149,7 @@ class LobbyListView(arcade.View):
         
         @message_box.event("on_action")
         def on_message_box_close(event):
-            message = f"{GAME_PREFIX} EXIT {self.lobby_id}"
+            message = f"{GAME_PREFIX} EXIT {self.lobby_id}\n"
             self.lobby_id = -1
             try:
                 self.client_socket.sendall(message.encode('utf-8'))
@@ -168,8 +171,7 @@ class LobbyListView(arcade.View):
         @message_box.event("on_action")
         def on_waiting_box_action(event):
             print("[LobbyListView] Exiting waiting modal.")
-            self.client_socket.sendall(f"{GAME_PREFIX} EXIT {self.lobby_id}".encode('utf-8'))
-            message_box.kill()
+            self.client_socket.sendall(f"{GAME_PREFIX} EXIT {self.lobby_id}\n".encode('utf-8'))
         self.manager.add(message_box) 
         
     def show_server_error_popup(self):
@@ -200,7 +202,7 @@ class LobbyListView(arcade.View):
         """
         self.lobby_id = lobby_id
         print(f"[LobbyListView] Attempting to join lobby {lobby_id}...")
-        message = f"{GAME_PREFIX} JOIN {lobby_id}"
+        message = f"{GAME_PREFIX} JOIN {lobby_id}\n"
         try:
             self.client_socket.sendall(message.encode('utf-8'))
         except Exception as e:

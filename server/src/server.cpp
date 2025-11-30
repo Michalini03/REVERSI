@@ -1,6 +1,4 @@
 #include "../include/server.h"      // Include the header file we will create
-#include "../include/lobby.h"       // Include the lobby header
-#include "../include/player.h"      // Include the player header
 #include <iostream>      // For standard I/O operations (cout, cerr)
 #include <string>        // For using std::string
 #include <cstring>       // For C-style string functions (memset)
@@ -24,11 +22,9 @@
 // Global variables
 std::vector<Lobby> lobbies; 
 std::vector<int> client_sockets; 
-std::vector<Player> players;
 
 std::mutex clients_mutex;
 std::mutex lobbies_mutex;
-std::mutex players_mutex;
 
 void startServer() {
     int server_fd, new_socket;
@@ -46,7 +42,12 @@ void startServer() {
         exit(EXIT_FAILURE);
     }
 
-    // --- 2. Bind the socket to an address and port --
+    // Can use port immediately after crash
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -58,7 +59,6 @@ void startServer() {
         exit(EXIT_FAILURE);
     }
 
-    // --- 3. Listen for incoming connections ---
     if (listen(server_fd, 3) < 0) {
         perror("listen failed");
         close(server_fd);
@@ -90,21 +90,16 @@ void startServer() {
 
 
 void handleClientLogic(int client_socket) {
-    char buffer[1024] = {0};
-    int player_id;
+    std::string dataBuffer = ""; 
+    char tempBuffer[1024];
 
     // Create new player
-    {
-        std::lock_guard<std::mutex> lock(players_mutex);
-        Player new_player(client_socket, players.size());
-        player_id = new_player.id;
-        players.push_back(new_player);
-        std::cout << "[SERVER] New player created with socket " << client_socket << std::endl;
-    }
+    Player *new_player = new Player(client_socket);
+    
 
     while(true) {
-        memset(buffer, 0, 1024);
-        int valread = read(client_socket, buffer, 1024);
+        memset(tempBuffer, 0, 1024);
+        int valread = read(client_socket, tempBuffer, 1024);
         
         if (valread <= 0) {
             std::cout << "Client " << client_socket << " disconnected." << std::endl;
@@ -119,10 +114,22 @@ void handleClientLogic(int client_socket) {
             }
             break; 
         }
+        dataBuffer.append(tempBuffer, valread);
+        size_t pos = 0;
+        while ((pos = dataBuffer.find('\n')) != std::string::npos) {
+            // Extract single message
+            std::string message = dataBuffer.substr(0, pos);
+            
+            // Remove message from buffer
+            dataBuffer.erase(0, pos + 1);
 
-        handleMessage(client_socket, player_id, buffer);
+            // Process it
+            handleMessage(client_socket, message.c_str(), *new_player);
+        }
+
     }
 
+    delete new_player;
     close(client_socket);
     
     // Remove from global list
@@ -135,10 +142,12 @@ void handleClientLogic(int client_socket) {
     }
 }
 
-void handleMessage(int client_socket, int player_id, const char* message) {
+void handleMessage(int client_socket, const char* message, Player& player) {
     // For now, just echo the message back to the client
     std::string messagePrefix = "REV";
     std::string messageStr(message);
+
+    std::cout << "Handling message:" << messageStr << std::endl;
 
     if (messageStr.substr(0, messagePrefix.size()).compare(messagePrefix) == 0) {
         // Strings are EQUAL (prefix IS "REV")
@@ -150,18 +159,11 @@ void handleMessage(int client_socket, int player_id, const char* message) {
         ss >> prefix;
         ss >> command;
 
-        if (command == "MOVE") {
-            int x, y;
-            ss >> x >> y;
-            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
-            // Here you would add logic to update the game state
-        }
-        else if (command == "CREATE") {
+        if (command == "CREATE") {
             std::string username;
             ss >> username;
 
-            std::lock_guard<std::mutex> lock(players_mutex);
-            players[player_id].appendName(username);
+            player.appendName(username);
 
             std::cout << "Processing CREATE command." << std::endl;
 
@@ -169,11 +171,13 @@ void handleMessage(int client_socket, int player_id, const char* message) {
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
                 for (auto &lobby : lobbies) {
-                    if (lobby.reconnectUser(players[player_id]) != -1) {
+                    if (lobby.reconnectUser(player) != -1) {
                         std::cout << "[SERVER] User already connected to a lobby." << std::endl;
                         if (lobby.getStatus() == PAUSE_STATUS) {
                             // Resume game
                             std::cout << "[SERVER] Resuming paused game for user." << std::endl;
+                            handleReconecting(client_socket, player, lobby);
+                            return;
                         }
                     }
                 }
@@ -193,7 +197,8 @@ void handleMessage(int client_socket, int player_id, const char* message) {
             ss >> lobbyId;
             std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
 
-            result = handleLobbyJoin(client_socket, player_id, lobbyId);
+            lobbyId--;
+            result = handleLobbyJoin(client_socket, lobbyId, player);
             // Here you would add logic to join the specified lobby
             if(result == 1) {
                 std::cout << "[SERVER] Client joined as Player 1 in lobby " << lobbyId << std::endl;
@@ -205,18 +210,34 @@ void handleMessage(int client_socket, int player_id, const char* message) {
             } else {
                 std::cout << "[SERVER] Error joining lobby " << lobbyId << std::endl;
             }
+        }
+        else if (command == "EXIT") {
+            int lobbyId;
+            ss >> lobbyId;
+            std::cout << "Processing EXIT command for lobby " << lobbyId << std::endl;
 
-
-
+            lobbyId--;
+            handleLobbyExit(client_socket, lobbyId);
+            // Here you would add logic to exit the specified lobby
         }
         else if (command == "MOVE") {
-            int x, y;
-            int lobbyId;
-            ss >> x >> y;
-            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
-            ss >> lobbyId;
+            int x = -1, y = -1, lobbyId = -1;
 
-            handleMoving(x, y, client_socket, lobbyId);
+            if (ss >> x >> y >> lobbyId) {
+                std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
+                
+                lobbyId--; 
+
+                if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
+                    std::cerr << "[ERROR] Invalid Lobby ID: " << lobbyId << std::endl;
+                    return;
+                }
+
+                std::cout << "HII (" << x << ", " << y << ") in Lobby " << lobbyId << std::endl;         
+                handleMoving(x, y, client_socket, lobbyId);
+            } else {
+                std::cerr << "[ERROR] Failed to parse MOVE command args." << std::endl;
+            }
         }
         else {
             std::cout << "Unknown game command: " << command << std::endl;
@@ -224,9 +245,6 @@ void handleMessage(int client_socket, int player_id, const char* message) {
     } else {
         return;
     }
-
-    std::cout << "Handling message: " << messageStr << std::endl;
-    send(client_socket, message, strlen(message), 0);
 }
 
 int sendConnectInfo(int client_socket, int playerNumber) {
@@ -239,11 +257,23 @@ int sendConnectInfo(int client_socket, int playerNumber) {
 
 int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int playerNumber, Lobby& lobby) {
     std::string prefix(PREFIX_GAME);
+
+    // Send START message
     std::string message = prefix + " START " + std::to_string(playerNumber);
     message += " " + player1 + " " + player2;
     message += "\n";
-    
     send(client_socket, message.c_str(), message.size(), 0);
+
+    sendState(client_socket, lobby);
+    return 0;
+}
+
+int sendState(int client_socket, Lobby& lobby) {
+    std::string prefix(PREFIX_GAME);
+
+    if (client_socket < 0 || !&lobby) {
+        return -1;
+    }
 
     std::string boardState = prefix + " STATE " + lobby.getBoardStateString() + "\n";
     send(client_socket, boardState.c_str(), boardState.size(), 0);
@@ -258,13 +288,12 @@ int sendLobbyList(int client_socket) {
     return 0;
 }
 
-int handleLobbyJoin(int client_socket, int player_id, int lobbyId) {
+int handleLobbyJoin(int client_socket, int lobbyId, Player& player) {
     if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
         return -1; // Invalid lobby ID
     }
 
     std::lock_guard<std::mutex> lock(lobbies_mutex);
-    std::lock_guard<std::mutex> lock2(players_mutex);
     for (auto &lobby : lobbies) {
         if (lobby.isUserConnected(client_socket)) {
             std::cout << "[SERVER] User already connected to a lobby." << std::endl;
@@ -273,14 +302,29 @@ int handleLobbyJoin(int client_socket, int player_id, int lobbyId) {
     }
     
     Lobby &lobby = lobbies[lobbyId];
-    Player* player = &players[player_id];
-    int result = lobby.setPlayer(player);
+    int result = lobby.setPlayer(&player);
 
     if(result > 0) {
         sendConnectInfo(client_socket, result);
     }
     
     return result;
+}
+
+int handleLobbyExit(int client_socket, int lobbyId) {
+    if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
+        return -1; // Invalid lobby ID
+    }
+
+    if (client_socket < 0) {
+        return -1; // Invalid socket
+    }
+
+    std::lock_guard<std::mutex> lock(lobbies_mutex);
+    std::cout << "AHOJ" << std::endl;
+    Lobby &lobby = lobbies[lobbyId];
+    lobby.removePlayer(client_socket);
+    return 0;
 }
 
 int handleMoving(int x, int y, int client_socket, int lobbyId) {
@@ -305,14 +349,30 @@ int handleMoving(int x, int y, int client_socket, int lobbyId) {
         return -1;
     }
 
-    if (lobby.validateAndApplyMove(x, y, client_socket)) {
+    if (lobby.validateAndApplyMove(x, y, current_player)) {
+        std::cout << "JSEM TADY" << std::ends;
+
         lobby.setStatus((current_player == 1) ? 2 : 1);
 
+        int client_socket_1 = lobby.getPlayerSocket1();
+        int client_socket_2 = lobby.getPlayerSocket2();
+
+        sendState(client_socket_1, lobby);
+        sendState(client_socket_2, lobby);
+        return 0;
     }
-    return 0;
+    else {
+        return 0;
+    }
 }
 
-int handleReconecting() {
+int handleReconecting(int client_socket, Player& player, Lobby& lobby) {
+    if(client_socket < 0 || &player == nullptr || &lobby == nullptr) {
+        return -1;
+    }
+
+    lobby.reconnectUser(player);
+    sendStartingPlayerInfo(client_socket, lobby.getPlayer1Username(), lobby.getPlayer2Username(), lobby.getStatus(), lobby);
     return 0;
 }
 
@@ -337,7 +397,5 @@ void startGame(int lobbyIndex) {
 
     // Send info to Player 1 (You are P1, Opponent is P2)
     sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1, lobby); 
-    
-    // Send info to Player 2 (You are P2, Opponent is P1)
-    sendStartingPlayerInfo(p2Socket, p2Name, p1Name, 1, lobby);
+    sendStartingPlayerInfo(p2Socket, p1Name, p2Name, 1, lobby);
 }

@@ -33,7 +33,11 @@ def start_receive_thread(client_socket, server_queue):
                 break
 
             # Print the server's response
-            server_queue.put(data.decode('utf-8'))
+            full_message: str = data.decode('utf-8')
+            messages = full_message.split("\n")
+            for message in messages:
+                if message is not None or message.strip() != "":
+                    server_queue.put(message)
 
     except (ConnectionResetError, BrokenPipeError):
         print("[Server Thread] Connection to server was lost.")

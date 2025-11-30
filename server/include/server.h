@@ -1,4 +1,6 @@
 #pragma once
+#include "../include/player.h"      // Include the player header
+#include "../include/lobby.h"       // Include the lobby header
 #include <string>
 
 /**
@@ -23,10 +25,11 @@ void startGame(int lobbyId);
  */
 int sendLobbyList(int client_socket);
 
-int sendConnectInfo(int client_socket, int player_id);
+int sendConnectInfo(int client_socket);
 
-int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int player_id);
+int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, Lobby& lobby);
 
+int sendState(int client_socket, Lobby& lobby);
 
 /**
  * @brief Handles the logic for a connected client.
@@ -37,9 +40,10 @@ void handleClientLogic(int client_socket);
 /**
  * @brief Handles an incoming message from a client.
  * @param client_socket The file descriptor for the client's socket.
- * @param message The null-terminated message received from the client.
+ * @param message The null-terminated message received from the client
+ * @param player Reference to the Player object associated with the client.
  */
-void handleMessage(int client_socket, int player_id, const char* message);
+void handleMessage(int client_socket, const char* message, Player& player);
 
 
 /**
@@ -48,7 +52,21 @@ void handleMessage(int client_socket, int player_id, const char* message);
  * @param lobbyId id of lobby (index in vector)
  * @param 1 - user is player1, 2 - user is player2, 3 - lobby is full, 0 - error
 */
-int handleLobbyJoin(int client_socket, int player_id, int lobbyId);
+int handleLobbyJoin(int client_socket, int lobbyId, Player& player);
+
+/**
+ * @brief Handles a client exiting a lobby.
+ * @param client_socket The file descriptor for the client's socket.
+ */
+int handleLobbyExit(int client_socket, int lobbyId);
+
+/**
+ * @brief Handles reconnection of a player to a lobby.
+ * @param client_socket The file descriptor for the client's socket.    
+ * @param player Reference to the Player object associated with the client.
+ * @param lobby Reference to the Lobby where player used to be.
+ */
+int handleReconecting(int client_socket, Player& player, Lobby& Lobby);
 
 /**
  * @brief Handles a move made by a player in a lobby.
@@ -60,4 +78,3 @@ int handleLobbyJoin(int client_socket, int player_id, int lobbyId);
  */
 int handleMoving(int x, int y, int client_socket, int lobbyId);
 
-int handleReconecting();

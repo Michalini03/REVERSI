@@ -25,12 +25,14 @@ public:
       bool isUserConnected(int client_socket);
       int reconnectUser(Player new_player);
       void removePlayer(int socket);
+      void resetLobby();
 
       // Game-related methods
       int canUserPlay(int client_socket);
       bool validateAndApplyMove(int x, int y, int client_socket);
       std::string getBoardStateString();
 private:
+      int statusBeforePause;
       int lobbyId;
       int status;
       int board[8][8];
