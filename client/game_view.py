@@ -11,13 +11,15 @@ BOARD_SIZE = 8
 UI_WIDTH = WINDOW_WIDTH - GAME_WIDTH  # This is 200px
 RIGHT_MARGIN = UI_WIDTH // 10
 
+PREFIX = "REV"
+
 
 class GameView(arcade.View):
     """
     Main application class.
     """
 
-    def __init__(self, client_socket, server_queue, current_player, username_one: str = "Player 1", username_two: str = "Player 2"):
+    def __init__(self, client_socket, server_queue, current_player: int, username_one: str = "Player 1", username_two: str = "Player 2", lobby_id: int = -1, init_state: str = ""):
         """
         Initializer
         """
@@ -30,7 +32,7 @@ class GameView(arcade.View):
         # Variables that will hold sprite lists
         self.current_player = current_player
 
-        # --- FIX: Save both usernames ---
+        self.lobby_id = lobby_id
         self.username_one = username_one
         self.username_two = username_two
 
@@ -43,25 +45,34 @@ class GameView(arcade.View):
 
         # Set up the player info
         self.board = None
+        self.init_state = init_state
 
         # Set the background color
         self.background_color = arcade.color.AMAZON
-        self.setup_game()
+        
 
     def setup_game(self):
         """ Set up the game and initialize the variables. """
-        # Sprite lists
         self.board = Board()
-        self.board.check_possible_moves(self.current_player)
-
-        # --- Call the UI setup ---
         self.prepare_ui()
+        
+        params = self.init_state.split()
+        if params[0] == "REV":
+            if params[1] == "STATE":
+                state_string = params[3]
+                self.board.set_state(state_string)
+                
+                if self.player1_score_label:
+                        self.player1_score_label.text = str(params[4])
+                if self.player2_score_label:
+                    self.player2_score_label.text = str(params[5])
 
     # --- ADDED: on_show_view ---
     def on_show_view(self):
         """ This is run when we switch to this view """
         # Enable the UIManager
         self.manager.enable()
+        self.setup_game()
         # Set the background color
         arcade.set_background_color(self.background_color)
 
@@ -78,64 +89,84 @@ class GameView(arcade.View):
         # This command has to happen before we start drawing
         self.clear()
 
-        # Draw all the sprites.
         self.board.draw()
-
-        # --- ADDED: Draw the GUI ---
-        # This draws all the UI elements (labels, buttons, etc)
         self.manager.draw()
+        
+    def show_server_error_popup(self):
+        """
+        Shows an Error modal popup using UIMessageBox 
+        """
+        self.manager.focused_element = None 
+        
+        message_box = arcade.gui.UIMessageBox(
+            width=350,
+            height=200,
+            message_text="Disconnected from server.",
+            buttons=["OK"]
+        )
+        
+        @message_box.event("on_action")
+        def on_message_box_close(event):
+            self.server_queue = None
+            from lobby_view import LobbyView
+            self.window.show_view(LobbyView())
+            pass
+        
+        self.manager.add(message_box)
+
 
     def on_update(self, delta_time):
         """ Movement and game logic """
         
-        if self.player1_score_label:
-            score1 = self.board.get_score(1) # Assuming you add this method
-            self.player1_score_label.text = str(score1)
-    
-        if self.player2_score_label:
-            score2 = self.board.get_score(2)
-            self.player2_score_label.text = str(score2)
-        
-        return
+        if self.client_socket is None or self.server_queue is None:
+            return
+        print("[GameView] Checking server queue for messages...")
+        while not self.server_queue.empty():
+            message = self.server_queue.get()
+            print(f"[GameView] Message from server: {message}")
+            # --- PROCESS SERVER MESSAGES HERE ---
+            
+            params = message.split()
+            if params[0] == PREFIX:
+                command = params[1]
+                if command == "STATE":
+                    state_string = " ".join(params[2])
+                    self.board.set_state(state_string)
+                    score1 = params[3]
+                    score2 = params[4] 
+                    if self.player1_score_label:
+                        self.player1_score_label.text = str(score1)
+                    if self.player2_score_label:
+                        self.player2_score_label.text = str(score2)
+                elif command == "SCORE":
+                    score1 = params[2]
+                    score2 = params[3]
+                    if self.player1_score_label:
+                        self.player1_score_label.text = str(score1)
+                    if self.player2_score_label:
+                        self.player2_score_label.text = str(score2)
+                elif message == "SERVER_DISCONNECT":
+                    print("[GameView] Disconnected from server.")
+                    self.show_server_error_popup()
 
     def on_mouse_press(self, x, y, button, key_modifiers):
         """
         Called when the user presses a mouse button.
         """
         
-        # --- ADDED: Check if the click was on the UI ---
         # If the click is on the UI, let the UIManager handle it and stop
         if self.manager.on_mouse_press(x, y, button, key_modifiers):
             return
             
-        # --- ADDED: Check if the click is outside the game board ---
+        # Check if the click is outside the game board
         if x > GAME_WIDTH:
             return
 
         if button == arcade.MOUSE_BUTTON_LEFT:
             indexX = int(x // (GAME_WIDTH / BOARD_SIZE))
             indexY = int(y // (WINDOW_HEIGHT / BOARD_SIZE))
-
-            is_valid, moves = self.board.check_rules(indexX, indexY, self.current_player)
-            if not is_valid:
-                return
-
-            centerX = (indexX * (GAME_WIDTH / BOARD_SIZE)) + (GAME_WIDTH / BOARD_SIZE) / 2
-            centerY = (indexY * (WINDOW_HEIGHT / BOARD_SIZE)) + (WINDOW_HEIGHT / BOARD_SIZE) / 2
-
-            color = arcade.color.BLACK if self.current_player == 1 else arcade.color.WHITE
-            self.board.grid[indexY][indexX] = Stone(color, centerX, centerY)
-            self.board.flip_stones(indexX, indexY, moves, self.current_player)
-            self.current_player = 2 if self.current_player == 1 else 1
-            can_continue = self.board.check_possible_moves(self.current_player)
-            while can_continue == False:
-                # self.board.flip_stones(indexX, indexY, moves, self.current_player) # <-- This looks like a bug, removing it.
-                print(f"Player {self.current_player} has no moves, skipping turn.")
-                # Switch player again
-                self.current_player = 2 if self.current_player == 1 else 1
-                can_continue = self.board.check_possible_moves(self.current_player)
-                
-                # TODO: Check for game end (neither player can move)
+            print(f"[GameView] Mouse clicked at board position: ({indexX}, {indexY})")
+            self.send_move(indexX, indexY)
 
     def _create_player_ui(self, username: str, player_color: tuple) -> (arcade.gui.UIBoxLayout, arcade.gui.UILabel):
         """
@@ -236,3 +267,9 @@ class GameView(arcade.View):
 
         # Add the anchor layout to the manager
         self.manager.add(self.ui_anchor_layout)
+        
+    def send_move(self, board_x: int, board_y: int):
+        """ Send the player's move to the server """
+        message = f"{PREFIX} MOVE {board_x} {board_y} {self.lobby_id}"
+        print(f"[GameView] Sending move to server: {message}")
+        self.client_socket.sendall(message.encode())

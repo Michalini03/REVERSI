@@ -211,9 +211,12 @@ void handleMessage(int client_socket, int player_id, const char* message) {
         }
         else if (command == "MOVE") {
             int x, y;
+            int lobbyId;
             ss >> x >> y;
             std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
-            // Here you would add logic to update the game state
+            ss >> lobbyId;
+
+            handleMoving(x, y, client_socket, lobbyId);
         }
         else {
             std::cout << "Unknown game command: " << command << std::endl;
@@ -234,13 +237,16 @@ int sendConnectInfo(int client_socket, int playerNumber) {
     return 0;
 }
 
-int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int playerNumber) {
+int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int playerNumber, Lobby& lobby) {
     std::string prefix(PREFIX_GAME);
     std::string message = prefix + " START " + std::to_string(playerNumber);
     message += " " + player1 + " " + player2;
     message += "\n";
     
     send(client_socket, message.c_str(), message.size(), 0);
+
+    std::string boardState = prefix + " STATE " + lobby.getBoardStateString() + "\n";
+    send(client_socket, boardState.c_str(), boardState.size(), 0);
     return 0;
 }
 
@@ -268,13 +274,42 @@ int handleLobbyJoin(int client_socket, int player_id, int lobbyId) {
     
     Lobby &lobby = lobbies[lobbyId];
     Player* player = &players[player_id];
-    int result = lobby.appendPlayer(player);
+    int result = lobby.setPlayer(player);
 
     if(result > 0) {
         sendConnectInfo(client_socket, result);
     }
     
     return result;
+}
+
+int handleMoving(int x, int y, int client_socket, int lobbyId) {
+    if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
+        return -1; // Invalid lobby ID
+    }
+
+    if (x < 0 || x >=8 || y < 0 || y >=8) {
+        return -1; // Invalid move coordinates
+    }
+
+    if (client_socket < 0) {
+        return -1; // Invalid socket
+    }
+    
+    std::lock_guard<std::mutex> lock(lobbies_mutex);
+    Lobby &lobby = lobbies[lobbyId];
+
+    int current_player = lobby.canUserPlay(client_socket);
+    if(current_player == -1) {
+        std::cout << "[LOBBY " << lobbyId << "] It's not the player's turn or player not found." << std::endl;
+        return -1;
+    }
+
+    if (lobby.validateAndApplyMove(x, y, client_socket)) {
+        lobby.setStatus((current_player == 1) ? 2 : 1);
+
+    }
+    return 0;
 }
 
 int handleReconecting() {
@@ -301,8 +336,8 @@ void startGame(int lobbyIndex) {
     std::cout << "[LOBBY " << (lobbyIndex+1) << "] Player 1 socket: " << p1Socket << ", Player 2 socket: " << p2Socket << std::endl;
 
     // Send info to Player 1 (You are P1, Opponent is P2)
-    sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1); 
+    sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1, lobby); 
     
     // Send info to Player 2 (You are P2, Opponent is P1)
-    sendStartingPlayerInfo(p2Socket, p2Name, p1Name, 1); 
+    sendStartingPlayerInfo(p2Socket, p2Name, p1Name, 1, lobby);
 }

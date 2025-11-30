@@ -1,5 +1,5 @@
 # Variables
-SERVER_SRCS = server/main.cpp server/src/lobby.cpp server/src/server.cpp 
+SERVER_SRCS = server/main.cpp server/src/lobby.cpp server/src/server.cpp server/src/gameLogic.cpp
 SERVER_BIN = server/server
 
 # Default target (runs when you just type `make`)

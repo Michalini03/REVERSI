@@ -1,131 +1,207 @@
 import arcade
 import arcade.gui
+import queue
+import threading
+from server_handler import connect_to_server, start_receive_thread
 from lobby_list_view import LobbyListView
 
 GAME_PREFIX = "REV"
+DEFAULT_IP = "127.0.0.1"
+DEFAULT_PORT = 5050
+
+
+class QuietInputText(arcade.gui.UIInputText):
+    def deactivate(self):
+        if self._active:
+            super().deactivate()
+
 
 class LobbyView(arcade.View):
-    """
-    Lobby view class.
-    Handles the UI for the game lobby.
-    """
-
-    def __init__(self, client_socket, server_queue):
-        """ Initializer """
-        # Call the parent class initializer
+    def __init__(self):
         super().__init__()
-
-        # Create a UIManager
-        self.manager = arcade.gui.UIManager()  
-
-        # Variable to hold the username
+        self.manager = arcade.gui.UIManager()
+        
         self.username = ""
-        # UI elements
-        self.username_input = None
-        self.start_button = None
-        self.anchor_layout = None
+        self.client_socket = None
+        self.server_queue = None
 
-        # Background color
         self.background_color = arcade.color.AMAZON
-
-        # Call setup
         self.setup_lobby()
 
-        self.client_socket = client_socket
-        self.server_queue = server_queue
-
     def setup_lobby(self):
-        """ Set up the lobby view. """
-        # Create a layout to anchor elements
-        self.anchor_layout = arcade.gui.UIAnchorLayout()
+        self.manager.clear()
+        
+        # Increased space_between to account for taller inputs
+        self.v_box = arcade.gui.UIBoxLayout(space_between=15)
 
+        # --- Title ---
         title_label = arcade.gui.UILabel(
-            text="Welcome to the Lobby",
-            font_size=30,
+            text="Welcome to REVERSI",
+            font_size=28,
             font_name="Arial",
-            text_color=arcade.color.WHITE
+            text_color=arcade.color.WHITE,
+            bold=True
         )
+        self.v_box.add(title_label.with_padding(bottom=20))
 
-        self.anchor_layout.add(
-            child=title_label,
-            anchor_x="center",
-            anchor_y="center",
-            align_y=150
-        )
+        # This keeps the code clean since we have 3 similar inputs
+        def add_input_field(label_text, default_val):
+            label = arcade.gui.UILabel(
+                text=label_text, 
+                text_color=arcade.color.WHITE,
+                font_size=14,
+                bold=True
+            )
+            self.v_box.add(label)
 
-        self.username_input = arcade.gui.UIInputText(
-            width=250,
-            height=40,
-            text="Enter Username",
-            font_size=16
-        )
-        self.anchor_layout.add(
-            child=self.username_input, 
-            anchor_x="center", 
-            anchor_y="center", 
-            align_y=0
-        )
+            # 2. Input (Taller height)
+            input_field = QuietInputText(
+                width=250, 
+                height=32,
+                text=default_val, 
+                font_size=15,
+                text_color=arcade.color.WHITE
+            )
+            self.v_box.add(input_field)
+            return input_field
 
+        # Inputs
+        self.username_input = add_input_field("Username:", "Player1")
+        self.ip_input = add_input_field("Server IP:", DEFAULT_IP)
+        self.port_input = add_input_field("Server Port:", str(DEFAULT_PORT))
+
+        # Start Button
         self.start_button = arcade.gui.UIFlatButton(
-            text="Start Game",
-            width=250,
-            height=40
+            text="Connect & Start", 
+            width=250, 
+            height=100  # Made button slightly taller to match inputs
         )
+        self.v_box.add(self.start_button.with_padding(top=30))
 
+        # --- Layout & Anchor ---
+        self.anchor_layout = arcade.gui.UIAnchorLayout()
         self.anchor_layout.add(
-            child=self.start_button,
+            child=self.v_box,
             anchor_x="center",
-            anchor_y="center",
-            align_y=-60
+            anchor_y="center"
         )
-
-        # Add the layout to the UIManager
+        
         self.manager.add(self.anchor_layout)
 
         # --- Event Handler ---
-        # Assign the 'on_click' event for the start button
         @self.start_button.event("on_click")
         def on_click_start(event):
-            # Get the username from the input field
-            self.username = self.username_input.text
-            print(f"Username entered: {self.username}")
+            self.connect_and_start()
 
-            # Here, you would typically switch to the main game view
-            # Example (assuming you have a 'GameView' class):
-            # game_view = GameView(self.username) # Pass username to the game
-            # self.window.show_view(game_view)
-            message: str = f"{GAME_PREFIX} CREATE {self.username}"
+
+    def show_error_popup(self, error_message):
+        """
+        Shows an Error modal popup using UIMessageBox 
+        """
+        self.manager.focused_element = None 
+        
+        message_box = arcade.gui.UIMessageBox(
+            width=350,
+            height=200,
+            message_text=error_message,
+            buttons=["OK"]
+        )
+        
+        @message_box.event("on_action")
+        def on_message_box_close(event):
+            pass
+        
+        self.manager.add(message_box)
+
+
+    def connect_and_start(self):
+        self.username = self.username_input.text
+        target_ip = self.ip_input.text
+        
+        is_valid = self.valid_values(target_ip, self.port_input.text, self.username)
+        if not is_valid[0]:
+            self.show_error_popup(is_valid[1])
+            return
+        
+        target_port = int(self.port_input.text)
+
+        print(f"Connecting to {target_ip}:{target_port}...")
+
+        # 3. Attempt Connection
+        client_socket = connect_to_server(target_ip, target_port)
+        
+        if client_socket is None:
+            print("[Main Thread] FAILED to connect.")
+            self.show_error_popup(f"Connection Failed.\n\nCould not reach:\n{target_ip}:{target_port}")
+            return
+
+        print("[Main Thread] Successfully connected.")
+        self.server_queue = queue.Queue()
+        
+        receive_thread = threading.Thread(
+            target=start_receive_thread,
+            args=(client_socket, self.server_queue),
+            daemon=True
+        )
+        receive_thread.start()
+
+        self.client_socket = client_socket
+        
+        # Send join message
+        try:
+            message = f"{GAME_PREFIX} CREATE {self.username}"
             self.client_socket.sendall(message.encode('utf-8'))
+        except Exception as e:
+            self.show_error_popup(f"Socket Error: {e}")
 
     def on_show_view(self):
-        """ This is run when we switch to this view """
-        # Enable the UIManager
-        # This is required for GUI elements to respond to events
         self.manager.enable()
-
-        # Set the background color
         arcade.set_background_color(self.background_color)
 
     def on_hide_view(self):
-        """ This is run when we switch away from this view """
-        # Disable the UIManager
-        # This prevents it from handling events when hidden
         self.manager.disable()
 
     def on_draw(self):
-        """ Render the screen. """
         self.clear()
         self.manager.draw()
 
     def on_update(self, delta_time):
-        """ Update method called periodically. """
+        # Safety check: Do nothing if queue isn't created yet
+        if self.server_queue is None:
+            return
+
         while not self.server_queue.empty():
-            message = self.server_queue.get()
-            if message.startswith(GAME_PREFIX):
-                # Process game-related messages here
-                params = message.split()
-                command: str = params[1]
-                if command == "LOBBY":
-                    print("[LobbyView] Received lobby list from server.")
-                    lobby_count: int = int(params[2])
-                    self.window.show_view(LobbyListView(lobby_count, self.client_socket, self.server_queue))
+            try:
+                message = self.server_queue.get_nowait()
+                if message.startswith(GAME_PREFIX):
+                    params = message.split()
+                    if len(params) > 1 and params[1] == "LOBBY":
+                        lobby_count = int(params[2])
+                        self.window.show_view(LobbyListView(lobby_count, self.client_socket, self.server_queue))
+            except queue.Empty:
+                pass
+            
+    def valid_values(self, ip, port_str, username) -> [bool, str]:
+        try:
+            port = int(port_str)
+            if port < 1 or port > 65535:
+                return [False, "Port must be between 1 and 65535."]
+        except ValueError:
+            return [False, "Port must be a valid integer."]
+        
+        if ip.strip() == "":
+            return [False, "IP address cannot be empty."]
+        
+        if not all(c.isdigit() or c == '.' for c in ip):
+            return [False, "IP address contains invalid characters."]
+        
+        if ip.count('.') != 3:
+            return [False, "IP address must be IPv4."]
+        
+        if username.strip() == "":
+            return [False, "Username cannot be empty."]
+        
+        if username.count(" ") > 0:
+            return [False, "Username cannot contain spaces."]
+        
+        return [True, ""]

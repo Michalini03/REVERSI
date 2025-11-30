@@ -4,10 +4,10 @@ SERVER_ADRESS = "127.0.0.1"
 PORT = 9999
 
 
-def connect_to_server():
+def connect_to_server(server_address=SERVER_ADRESS, port=PORT):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((SERVER_ADRESS, PORT))
+        sock.connect((server_address, port))
         return sock
     except socket.error as e:
         print(f"Connection error: {e}")
@@ -41,7 +41,9 @@ def start_receive_thread(client_socket, server_queue):
         print(f"[Server Thread] An error occurred: {e}")
     finally:
         # Clean up and close the socket when the loop ends
-        client_socket.close()
+        if client_socket:
+            client_socket.close()
+        server_queue.put("REV SERVER_DISCONNECT")
         print("[Server Thread] Disconnected.")
 
 

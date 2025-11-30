@@ -1,5 +1,6 @@
 #include "../include/lobby.h"
 #include "../include/player.h"
+#include "../include/gameLogic.h"
 #include <iostream>
 
 #define PLAYER_EMPTY 0
@@ -22,19 +23,22 @@ Lobby::Lobby(int id) {
                   board[i][j] = 0;
             }
       }
+
+      board[3][3] = PLAYER_TWO;
+      board[3][4] = PLAYER_ONE;
+      board[4][3] = PLAYER_ONE;
+      board[4][4] = PLAYER_TWO;
+
+      getAvaiableMoves(board, PLAYER_ONE);
 }
 
+// GETTERS
 int Lobby::getId() const {
       return this->lobbyId;
 }
 
 int Lobby::getStatus() const {
       return this->status;
-}
-
-void Lobby::setStatus(int newStatus) {
-      if (newStatus < 0) return;
-      this->status = newStatus;
 }
 
 int Lobby::getPlayerSocket1() {
@@ -67,9 +71,13 @@ std::string Lobby::getPlayer2Username() {
       return this->player2->username;
 }
 
+// SETTERS
+void Lobby::setStatus(int newStatus) {
+      if (newStatus < 0) return;
+      this->status = newStatus;
+}
 
-
-int Lobby::appendPlayer(Player* player) {
+int Lobby::setPlayer(Player* player) {
       if (player == nullptr || player->socket < 0 || player->username.empty()) {
             return -1;
       }
@@ -86,6 +94,8 @@ int Lobby::appendPlayer(Player* player) {
       }
 }
 
+
+// RELATED TO RECONNECTION
 bool Lobby::isUserConnected(int client_socket) {
       if (player1 != nullptr && player1->socket == client_socket || player2 != nullptr && player2->socket == client_socket) {
             return true;
@@ -133,4 +143,40 @@ void Lobby::removePlayer(int socket) {
                   std::cout << "[LOBBY " << lobbyId << " ERROR] Player 2 disconnected." << std::endl;
             }
       }
+}
+
+
+// GAME LOGIC METHODS
+std::string Lobby::getBoardStateString() {
+      std::string state;
+      for (int i = 0; i < 8; ++i) {
+            for (int j = 0; j < 8; ++j) {
+                  state += std::to_string(board[i][j]);
+            }
+      }
+
+      int score1 = getScoreForPlayer(PLAYER_ONE, board);
+      int score2 = getScoreForPlayer(PLAYER_TWO, board);
+
+      state += " " + std::to_string(score1) + " " + std::to_string(score2);
+      return state;
+}
+
+int Lobby::canUserPlay(int client_socket) {
+      if (player1 != nullptr && player1->socket == client_socket && status == PLAYER_ONE) {
+            return 1;
+      } else if (player2 != nullptr && player2->socket == client_socket && status == PLAYER_TWO) {
+            return 2;
+      }
+      return -1;
+}
+
+bool Lobby::validateAndApplyMove(int x, int y, int player) {
+      if (validateMove(x, y, board, player)) {
+            board[y][x] = player;
+            // After a valid move, recalculate possible moves for the next turn
+            getAvaiableMoves(board, (player == PLAYER_ONE) ? PLAYER_TWO : PLAYER_ONE);
+            return true;
+      }
+      return false; // Invalid move
 }
