@@ -184,14 +184,48 @@ int Lobby::canUserPlay(int client_socket) {
 
 bool Lobby::validateAndApplyMove(int x, int y, int player) {
       if (board[y][x] != 3 && board[y][x] != 0) return false;
-      std::cout << "KDE JE CHYBA" << std::endl;
+
       if (processMove(x, y, board, player, true)) {
             
-            getAvaiableMoves(board, (player == 1) ? 2 : 1);
+            // Define who is who
+            int opponent = (player == 1) ? 2 : 1;
+            
+            // --- STEP A: Can the Opponent play? ---
+            // We calculate hints for the OPPONENT now.
+            if (getAvaiableMoves(board, opponent)) {
+                  // Standard case: Opponent has moves, so we switch turn.
+                  setStatus(opponent);
+            } 
+            else {
+                  // --- STEP B: Opponent Cannot Play (PASS TURN) ---
+                  std::cout << "[LOBBY] Opponent " << opponent << " has no moves. Checking original player..." << std::endl;
+
+                  // We check if the ORIGINAL player can move again.
+                  if (getAvaiableMoves(board, player)) {
+                        // Original player goes again (Opponent passes)
+                        setStatus(player); 
+                        std::cout << "[LOBBY] Turn passed back to Player " << player << std::endl;
+                  } 
+                  else {
+                        // --- STEP C: Neither can play (GAME OVER) ---
+                        std::cout << "[LOBBY] No moves possible for anyone. GAME OVER." << std::endl;
+                        setStatus(ENDED_STATUS);
+                        // Optional: Calculate final winner here if you want to store it
+                  }
+            }
+            
             return true;
       }
       return false;
+}
+
+int Lobby::calculateWinner() {
+      if(status != ENDED_STATUS) {
+            return -1;
       }
+
+      return(getWinnerResults(board));
+}
 
 void Lobby::resetLobby() {
       std::cout << "[LOBBY " << lobbyId << "] Resetting lobby" << std::endl;

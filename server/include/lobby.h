@@ -29,6 +29,7 @@ public:
 
       // Game-related methods
       int canUserPlay(int client_socket);
+      int calculateWinner();
       bool validateAndApplyMove(int x, int y, int client_socket);
       std::string getBoardStateString();
 private:

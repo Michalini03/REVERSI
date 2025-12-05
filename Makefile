@@ -1,6 +1,7 @@
 # Variables
 SERVER_SRCS = server/main.cpp server/src/lobby.cpp server/src/server.cpp server/src/gameLogic.cpp
 SERVER_BIN = server/server
+VENV_ACTIVATE = .venv/bin/activate
 
 # Default target (runs when you just type `make`)
 all: $(SERVER_BIN)
@@ -17,8 +18,13 @@ run-server: $(SERVER_BIN)
 
 # Run the Python client
 run-client:
+ifeq (,$(wildcard .venv))
+	@echo ".venv does not exist. Creating virtual environment..."
+	python3 -m venv .venv
+	.venv/bin/pip install -r requirements.txt
+endif
 	@echo "Running client..."
-	python3 client/main.py
+	.venv/bin/python client/main.py
 
 # Run virtual environment for client
 run-venv:

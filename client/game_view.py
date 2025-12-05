@@ -49,13 +49,12 @@ class GameView(arcade.View):
 
         # Set the background color
         self.background_color = arcade.color.AMAZON
-        
 
     def setup_game(self):
         """ Set up the game and initialize the variables. """
         self.board = Board()
         self.prepare_ui()
-        
+
     # --- ADDED: on_show_view ---
     def on_show_view(self):
         """ This is run when we switch to this view """
@@ -108,8 +107,7 @@ class GameView(arcade.View):
         """
         Shows an Error modal popup using UIMessageBox 
         """
-        self.manager.focused_element = None 
-        
+
         pause_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
@@ -150,15 +148,15 @@ class GameView(arcade.View):
                     if self.player1_score_label:
                         self.player1_score_label.text = str(score1)
                     if self.player2_score_label:
-                        self.player2_score_label.text = str(score2)
-                        
-                    print(self.board)
+                        self.player2_score_label.text = str(score2)                        
                 elif command == "SERVER_DISCONNECT":
                     print("[GameView] Disconnected from server.")
                     self.show_server_error_popup()
                 elif command == "DISCONNECT":
                     player_name = params[2]
                     self.show_pause_modal()
+                elif command == "RECONENCT":
+                    return
                 else:
                     print("[GameView] Unexpected command from server.")
 

@@ -178,9 +178,21 @@ class LobbyView(arcade.View):
                     if len(params) > 1 and params[1] == "LOBBY":
                         lobby_count = int(params[2])
                         self.window.show_view(LobbyListView(lobby_count, self.client_socket, self.server_queue))
+                    elif params[1] == "START":
+                        print("[LobbyList] Reconnecting the game...")
+
+                        who_starts = int(params[2])
+                        player_name = params[3]
+                        opponent_name = params[4]
+                        lobby_id = int(params[5])
+
+                        from game_view import GameView
+                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id)
+                        self.window.show_view(game_view)
+                        return
             except queue.Empty:
                 pass
-            
+
     def valid_values(self, ip, port_str, username) -> [bool, str]:
         try:
             port = int(port_str)
@@ -188,20 +200,20 @@ class LobbyView(arcade.View):
                 return [False, "Port must be between 1 and 65535."]
         except ValueError:
             return [False, "Port must be a valid integer."]
-        
+
         if ip.strip() == "":
             return [False, "IP address cannot be empty."]
-        
+
         if not all(c.isdigit() or c == '.' for c in ip):
             return [False, "IP address contains invalid characters."]
-        
+
         if ip.count('.') != 3:
             return [False, "IP address must be IPv4."]
-        
+
         if username.strip() == "":
             return [False, "Username cannot be empty."]
-        
+
         if username.count(" ") > 0:
             return [False, "Username cannot contain spaces."]
-        
+
         return [True, ""]

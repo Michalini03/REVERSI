@@ -173,12 +173,9 @@ void handleMessage(int client_socket, const char* message, Player& player) {
                 for (auto &lobby : lobbies) {
                     if (lobby.reconnectUser(player) != -1) {
                         std::cout << "[SERVER] User already connected to a lobby." << std::endl;
-                        if (lobby.getStatus() == PAUSE_STATUS) {
-                            // Resume game
-                            std::cout << "[SERVER] Resuming paused game for user." << std::endl;
-                            handleReconecting(client_socket, player, lobby);
-                            return;
-                        }
+                        std::cout << "[SERVER] Resuming paused game for user." << std::endl;
+                        handleReconecting(client_socket, player, lobby);
+                        return;
                     }
                 }
             }
@@ -197,7 +194,7 @@ void handleMessage(int client_socket, const char* message, Player& player) {
             ss >> lobbyId;
             std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
 
-            lobbyId--;
+            lobbyId;
             result = handleLobbyJoin(client_socket, lobbyId, player);
             // Here you would add logic to join the specified lobby
             if(result == 1) {
@@ -216,7 +213,7 @@ void handleMessage(int client_socket, const char* message, Player& player) {
             ss >> lobbyId;
             std::cout << "Processing EXIT command for lobby " << lobbyId << std::endl;
 
-            lobbyId--;
+            lobbyId;
             handleLobbyExit(client_socket, lobbyId);
             // Here you would add logic to exit the specified lobby
         }
@@ -226,7 +223,7 @@ void handleMessage(int client_socket, const char* message, Player& player) {
             if (ss >> x >> y >> lobbyId) {
                 std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
                 
-                lobbyId--; 
+                lobbyId; 
 
                 if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
                     std::cerr << "[ERROR] Invalid Lobby ID: " << lobbyId << std::endl;
@@ -257,10 +254,10 @@ int sendConnectInfo(int client_socket, int playerNumber) {
 
 int sendStartingPlayerInfo(int client_socket, std::string player1, std::string player2, int playerNumber, Lobby& lobby) {
     std::string prefix(PREFIX_GAME);
-
+    std::cout << "Sending state" << std::endl;
     // Send START message
     std::string message = prefix + " START " + std::to_string(playerNumber);
-    message += " " + player1 + " " + player2;
+    message += " " + player1 + " " + player2 + " " + std::to_string(lobby.getId());
     message += "\n";
     send(client_socket, message.c_str(), message.size(), 0);
 
@@ -350,15 +347,19 @@ int handleMoving(int x, int y, int client_socket, int lobbyId) {
     }
 
     if (lobby.validateAndApplyMove(x, y, current_player)) {
-        std::cout << "JSEM TADY" << std::ends;
-
-        lobby.setStatus((current_player == 1) ? 2 : 1);
-
         int client_socket_1 = lobby.getPlayerSocket1();
         int client_socket_2 = lobby.getPlayerSocket2();
 
         sendState(client_socket_1, lobby);
         sendState(client_socket_2, lobby);
+
+        if(lobby.getStatus() == current_player) {
+            // TODO: Inform user about pass
+        }
+        else if(lobby.getStatus() == 3) {
+            
+        }
+        
         return 0;
     }
     else {
@@ -371,7 +372,6 @@ int handleReconecting(int client_socket, Player& player, Lobby& lobby) {
         return -1;
     }
 
-    lobby.reconnectUser(player);
     sendStartingPlayerInfo(client_socket, lobby.getPlayer1Username(), lobby.getPlayer2Username(), lobby.getStatus(), lobby);
     return 0;
 }

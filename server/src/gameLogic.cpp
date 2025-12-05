@@ -16,6 +16,31 @@ int getScoreForPlayer(int playerId, int board[][8]) {
     return count; // Example: score is 10 times the player ID
 }
 
+int getWinnerResults(int board[][8]) {
+      int score1 = 0;
+      int score2 = 0;
+      for(int i = 0; i < 8; ++i) {
+        for(int j = 0; j < 8; ++j) {
+            if(board[i][j] == 1) {
+                score1++;
+            }
+            else if (board[i][j] == 2) {
+                score2++;
+            }
+        }
+    }
+
+    if (score1 == score2) {
+      return 3;
+    }
+    else if (score1 > score2) {
+      return 1;
+    }
+    else {
+      return 2;
+    }
+}
+
 bool processMove(int x, int y, int board[][8], int player, bool apply) {
       // 1. Bounds Check
       if (x < 0 || x >= 8 || y < 0 || y >= 8) return false;

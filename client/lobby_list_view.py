@@ -25,12 +25,11 @@ class LobbyListView(arcade.View):
         self.manager = None
         self.v_box = None
         self.lobby_buttons = []
-        
+
         self.lobby_id = -1
 
         self.background_color = arcade.color.AMAZON
-        
-        
+
     def setup_lobby_list(self):
         """ Set up the lobby list view. """
         self.title_label = arcade.Text(
@@ -51,7 +50,7 @@ class LobbyListView(arcade.View):
         # Create the lobby buttons
         self.lobby_buttons = [] 
         for i in range(self.lobby_count):
-            lobby_id = i + 1
+            lobby_id = i
             button = arcade.gui.UIFlatButton(text=f"Join Lobby {lobby_id}", width=250)
 
 
@@ -113,18 +112,19 @@ class LobbyListView(arcade.View):
                         if player_id == 3:
                             self.show_error_popup("Lobby is full. Cannot join.")
                             return
-                        
+
                         print(f"[LobbyListView] Connected to lobby as player {player_id}")
                         self.show_waiting_circle()
-                        
+
                     if command == "START":
                         print("[LobbyListView] Game is starting...")
-                        
+
                         who_starts = int(params[2])
                         player_name = params[3]
                         opponent_name = params[4]
-                        
-                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, self.lobby_id)
+                        lobby_id = params[5]
+
+                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id)
                         self.window.show_view(game_view)
                         return
                     if command == "SERVER_DISCONNECT":
@@ -192,9 +192,9 @@ class LobbyListView(arcade.View):
             from lobby_view import LobbyView
             self.window.show_view(LobbyView())
             pass
-        
+
         self.manager.add(message_box)
-            
+
     def join_lobby(self, lobby_id):
         """
         Called when a 'Join Lobby' button is clicked.
