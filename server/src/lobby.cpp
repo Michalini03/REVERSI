@@ -109,12 +109,12 @@ int Lobby::reconnectUser(Player new_player) {
             player1->socket = new_player.socket;
             std::cout << "[LOBBY " << lobbyId << "] Player 1 reconnected with socket " << new_player.socket << std::endl;
             setStatus(statusBeforePause);
-            return lobbyId;
+            return 1;
       } else if (player2 != nullptr && player2->username == new_player.username) {
             player2->socket = new_player.socket;
             std::cout << "[LOBBY " << lobbyId << "] Player 2 reconnected with socket " << new_player.socket << std::endl;
             setStatus(statusBeforePause);
-            return lobbyId;
+            return 2;
       }
 
       return -1;
@@ -123,11 +123,11 @@ int Lobby::reconnectUser(Player new_player) {
 void Lobby::removePlayer(int socket) {
       if (status == ENDED_STATUS || status == PAUSE_STATUS) {
             if (player1 != nullptr && player1->socket == socket) {
-                  player1 = nullptr;
+                  player1->socket = -1;
                   std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected." << std::endl;
             }
             else if (player2 != nullptr && player2->socket == socket) {
-                  player2 = nullptr;
+                  player2->socket = -1;
                   std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected." << std::endl;
             }
 
@@ -145,11 +145,11 @@ void Lobby::removePlayer(int socket) {
             std::cout << "[LOBBY " << lobbyId << "] Game paused due to player disconnection." << std::endl;
             if (player1->socket == socket) {
                   player1->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << " ERROR] Player 1 disconnected." << std::endl;
+                  std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected." << std::endl;
             }
             else if (player2->socket == socket) {
                   player2->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << " ERROR] Player 2 disconnected." << std::endl;
+                  std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected." << std::endl;
             }
       }
 
@@ -230,10 +230,16 @@ int Lobby::calculateWinner() {
 void Lobby::resetLobby() {
       std::cout << "[LOBBY " << lobbyId << "] Resetting lobby" << std::endl;
 
-      status = 0;
-      statusBeforePause = 0;
-      player1 = nullptr;
-      player2 = nullptr;
+      status = ENDED_STATUS;
+      statusBeforePause = ENDED_STATUS;
+      if (player1 != nullptr) {
+            delete player1;
+            player1 = nullptr;
+      }
+      if (player2 != nullptr) {
+            delete player2;
+            player2 = nullptr;
+      }
       
       for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {

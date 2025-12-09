@@ -42,6 +42,7 @@ class GameView(arcade.View):
         # --- Store UI labels to update them later ---
         self.player1_score_label = None
         self.player2_score_label = None
+        self.pause_box = None
 
         # Set up the player info
         self.board = Board()
@@ -108,20 +109,23 @@ class GameView(arcade.View):
         Shows an Error modal popup using UIMessageBox 
         """
 
-        pause_box = arcade.gui.UIMessageBox(
+        self.pause_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
             message_text=f"Player {player_name} was disconnected from the game\nWaiting for reconnection.",
             buttons=["Leave"]
         )
         
-        @pause_box.event("on_action")
+        @self.pause_box.event("on_action")
         def on_message_box_close(event):
             from lobby_list_view import LobbyListView
             self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            message = f"{PREFIX} EXIT {self.lobby_id}\n"
+            print(f"[GameView] Leaving the game!")
+            self.client_socket.sendall(message.encode())
             pass
         
-        self.manager.add(pause_box)
+        self.manager.add(self.pause_box)
 
 
     def on_update(self, delta_time):
@@ -153,10 +157,15 @@ class GameView(arcade.View):
                     print("[GameView] Disconnected from server.")
                     self.show_server_error_popup()
                 elif command == "DISCONNECT":
-                    player_name = params[2]
-                    self.show_pause_modal()
-                elif command == "RECONENCT":
-                    return
+                    player_num = int(params[2])
+                    player_name: str = self.username_one if player_num == 1 else self.username_two
+                    print(f"[GameView] Player {player_name} disconnected from the game.")
+                    self.show_pause_modal(player_name)
+                elif command == "RECONNECT":
+                    if self.pause_box is not None:
+                        self.manager.remove(self.pause_box)
+                        self.pause_box = None
+                        print("[GameView] Opponent reconnected. ")
                 else:
                     print("[GameView] Unexpected command from server.")
 
@@ -184,9 +193,6 @@ class GameView(arcade.View):
         Helper function to create a UI block for a player.
         Returns a (UIBoxLayout, score_label_widget) tuple.
         """
-        # --- MODIFIED ---
-        # Create a vertical box for this player
-        # Added padding and bg_color directly here
         player_box = arcade.gui.UIBoxLayout(
             vertical=True, 
             space_between=5,
@@ -226,19 +232,9 @@ class GameView(arcade.View):
         )
         player_box.add(score_value_label)
 
-        # --- REMOVED ---
-        # The UIBoxGroup wrapper was incorrect.
-        # player_ui_group = arcade.gui.UIBoxGroup(
-        #     child=player_box,
-        #     padding=(10, 10, 10, 10),
-        #     bg_color=(40, 40, 40, 150) # Dark, semi-transparent
-        # )
-
-        # Return the group and the score label (so it can be updated)
-        # --- MODIFIED: Return player_box directly ---
         return player_box, score_value_label
 
-    # --- FINISHED: prepare_ui ---
+
     def prepare_ui(self):
         """ Prepare the UI elements """
         
@@ -246,10 +242,9 @@ class GameView(arcade.View):
         self.ui_anchor_layout = arcade.gui.UIAnchorLayout()
 
         # Create the main vertical box for the UI sidebar
-        # Use UI_WIDTH with a small margin (e.g., 180)
         ui_box = arcade.gui.UIBoxLayout(
             vertical=True,
-            width=UI_WIDTH - RIGHT_MARGIN, # 180
+            width=UI_WIDTH - RIGHT_MARGIN,
             space_between = RIGHT_MARGIN
         )
 
@@ -267,16 +262,14 @@ class GameView(arcade.View):
         )
         ui_box.add(player2_group)
 
-        # Anchor the main UI box to the top right
         self.ui_anchor_layout.add(
             child=ui_box,
             anchor_x="right",
             anchor_y="top",
             align_x=-RIGHT_MARGIN, # Center in the sidebar
-            align_y=-RIGHT_MARGIN  # 20px margin from the top
+            align_y=-RIGHT_MARGIN
         )
 
-        # Add the anchor layout to the manager
         self.manager.add(self.ui_anchor_layout)
         
     def send_move(self, board_x: int, board_y: int):

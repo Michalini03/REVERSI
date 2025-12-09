@@ -1,5 +1,11 @@
 # Variables
-SERVER_SRCS = server/main.cpp server/src/lobby.cpp server/src/server.cpp server/src/gameLogic.cpp
+SERVER_SRCS = server/main.cpp \
+              server/src/server.cpp \
+              server/src/handler.cpp \
+              server/src/sender.cpp \
+              server/src/lobby.cpp \
+              server/src/gameLogic.cpp
+
 SERVER_BIN = server/server
 VENV_ACTIVATE = .venv/bin/activate
 
@@ -7,9 +13,10 @@ VENV_ACTIVATE = .venv/bin/activate
 all: $(SERVER_BIN)
 
 # Compile the server
+# Added -pthread because your code uses std::thread
 $(SERVER_BIN): $(SERVER_SRCS)
 	@echo "Compiling server..."
-	g++ -std=c++17 -O2 -o $(SERVER_BIN) $(SERVER_SRCS)
+	g++ -std=c++17 -O2 -pthread -o $(SERVER_BIN) $(SERVER_SRCS)
 
 # Run the server
 run-server: $(SERVER_BIN)
@@ -25,10 +32,6 @@ ifeq (,$(wildcard .venv))
 endif
 	@echo "Running client..."
 	.venv/bin/python client/main.py
-
-# Run virtual environment for client
-run-venv:
-	@echo "Activating virtual environment and running client..."
 
 # Clean build files
 clean:
