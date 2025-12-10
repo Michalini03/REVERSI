@@ -4,106 +4,123 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <vector>
+#include <iterator>
 #include <sys/socket.h>
 
 // Note: Globals (lobbies, mutexes) are extern'd in globals.h
+std::vector<std::string> splitMessage(const std::string &s) {
+    std::istringstream iss(s);
+    return std::vector<std::string>{std::istream_iterator<std::string>{iss},
+                                    std::istream_iterator<std::string>{}};
+}
 
-void handleMessage(int client_socket, const char* message, Player& player) {
-    std::string messagePrefix = "REV";
-    std::string messageStr(message);
+void handleMessage(int clientSocket, const char* message, Player& player) {
+    std::string messageStr(message);   
+    std::vector<std::string> args = splitMessage(messageStr);
 
-    if (messageStr.substr(0, messagePrefix.size()).compare(messagePrefix) == 0) {
-        std::cout << "Received a game-related message." << std::endl;
-        std::stringstream ss(messageStr);
+    if (args.empty() || args[0] != "REV") {
+        player.tolerance++;
+        std::cout << "[SECURITY] Invalid prefix from client " << clientSocket << std::endl;
+        return;
+    }
 
-        std::string command;
-        std::string prefix;
-        ss >> prefix;
-        ss >> command;
+    if (args.size() < 2) {
+        std::cout << "[SECURITY] Empty command from client " << clientSocket << std::endl;
+        return;
+    }
 
+    std::string command = args[1];
+
+    try {
         if (command == "CREATE") {
-            std::string username;
-            ss >> username;
+            // REV CREATE <Username> (Size 3)
+            if (args.size() != 3) throw std::runtime_error("Invalid CREATE args");
+            
+            std::string username = args[2];
 
             player.appendName(username);
             std::cout << "Processing CREATE command." << std::endl;
 
-            // Check reconnection
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
                 for (auto &lobby : lobbies) {
                     int connectedUser = lobby.reconnectUser(player);
                     if (connectedUser != -1) {
-                        std::cout << "[SERVER] User already connected to a lobby." << std::endl;
-                        std::cout << "[SERVER] Resuming paused game for user." << std::endl;
-                        handleReconecting(client_socket, player, lobby, connectedUser);
+                        handleReconecting(clientSocket, player, lobby, connectedUser);
                         return;
                     }
                 }
             }
-
-            if(sendLobbyList(client_socket) == 0) {
-                std::cout << "[SERVER] Sent updated lobby list to client." << std::endl;
-            } else {
-                std::cout << "[ERROR] Failed to send lobby list to client." << std::endl;
-            }
+            if(sendLobbyList(clientSocket) != 0) throw std::runtime_error("Error when sending Lobby List");
         }
         else if (command == "JOIN") {
-            int result;
-            int lobbyId;
-            ss >> lobbyId;
-            std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
+            // REV JOIN <LobbyID> (Size 3)
+            if (args.size() != 3) throw std::runtime_error("Invalid JOIN args");
 
-            result = handleLobbyJoin(client_socket, lobbyId, player);
+            int lobbyId = std::stoi(args[2]); 
+
+            std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
+            int result = handleLobbyJoin(clientSocket, lobbyId, player);
             
             if(result == 1) {
                 std::cout << "[SERVER] Client joined as Player 1 in lobby " << lobbyId << std::endl;
-            } else if(result == 2) {
+            } else if(result == 2) { 
                 std::cout << "[SERVER] Client joined as Player 2 in lobby " << lobbyId << std::endl;
                 startGame(lobbyId);
             } else if(result == 3) {
-                std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
+                 std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
             } else {
-                std::cout << "[SERVER] Error joining lobby " << lobbyId << std::endl;
+                throw std::runtime_error("Error when joining players to lobby");
             }
         }
         else if (command == "EXIT") {
-            int lobbyId;
-            ss >> lobbyId;
+            // REV EXIT <LobbyID> (Size 3)
+            if (args.size() != 3) throw std::runtime_error("Invalid EXIT args");
+
+            int lobbyId = std::stoi(args[2]);
             std::cout << "Processing EXIT command for lobby " << lobbyId << std::endl;
 
-            handleLobbyExit(client_socket, lobbyId);
+            handleLobbyExit(clientSocket, lobbyId);
         }
         else if (command == "MOVE") {
-            int x = -1, y = -1, lobbyId = -1;
+            // REV MOVE <X> <Y> <LobbyID> (Size 5)
+            if (args.size() != 5) throw std::runtime_error("Invalid MOVE args");
 
-            if (ss >> x >> y >> lobbyId) {
-                std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
+            int x = std::stoi(args[2]);
+            int y = std::stoi(args[3]);
+            int lobbyId = std::stoi(args[4]);
 
-                if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
-                    std::cerr << "[ERROR] Invalid Lobby ID: " << lobbyId << std::endl;
-                    return;
-                }
+            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
 
-                handleMoving(x, y, client_socket, lobbyId);
-            } else {
-                std::cerr << "[ERROR] Failed to parse MOVE command args." << std::endl;
-            }
+
+            if(handleMoving(x, y, clientSocket, lobbyId) != 0) throw std::runtime_error("Error occured while applying move");
+        }
+        else if (command == "REMATCH") {
+            // REV REMATCH <LobbyID> (Size 3)
+            if (args.size() != 3) throw std::runtime_error("Invalid REMATCH args");
+
+            int lobbyId = std::stoi(args[2]);
+            // TODO: Implement Rematch Logic
         }
         else {
-            std::cout << "Unknown game command: " << command << std::endl;
+            std::cout << "[SECURITY] Unknown command: " << command << std::endl;
         }
+
+    } catch (const std::exception& e) {
+        // This catches wrong argument counts AND non-integer inputs (std::stoi errors)
+        std::cerr << "[SECURITY] Malformed command from client " << clientSocket << ": " << e.what() << std::endl;  
     }
 }
 
-int handleLobbyJoin(int client_socket, int lobbyId, Player& player) {
+int handleLobbyJoin(int clientSocket, int lobbyId, Player& player) {
     if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) {
         return -1; 
     }
 
     std::lock_guard<std::mutex> lock(lobbies_mutex);
     for (auto &lobby : lobbies) {
-        if (lobby.isUserConnected(client_socket)) {
+        if (lobby.isUserConnected(clientSocket)) {
             std::cout << "[SERVER] User already connected to a lobby." << std::endl;
             return -1;
         }
@@ -113,54 +130,54 @@ int handleLobbyJoin(int client_socket, int lobbyId, Player& player) {
     int result = lobby.setPlayer(&player);
 
     if(result > 0) {
-        sendConnectInfo(client_socket, result);
+        sendConnectInfo(clientSocket, result);
     }
     
     return result;
 }
 
-int handleLobbyExit(int client_socket, int lobbyId) {
+int handleLobbyExit(int clientSocket, int lobbyId) {
     if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) return -1;
-    if (client_socket < 0) return -1;
+    if (clientSocket < 0) return -1;
 
     std::lock_guard<std::mutex> lock(lobbies_mutex);
     Lobby &lobby = lobbies[lobbyId];
-    lobby.removePlayer(client_socket);
+    lobby.removePlayer(clientSocket);
     return 0;
 }
 
-int handleMoving(int x, int y, int client_socket, int lobbyId) {
+int handleMoving(int x, int y, int clientSocket, int lobbyId) {
       if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) return -1;
       if (x < 0 || x >=8 || y < 0 || y >=8) return -1; 
-      if (client_socket < 0) return -1; 
+      if (clientSocket < 0) return -1; 
       
       std::lock_guard<std::mutex> lock(lobbies_mutex);
       Lobby &lobby = lobbies[lobbyId];
 
-      int current_player = lobby.canUserPlay(client_socket);
+      int current_player = lobby.canUserPlay(clientSocket);
       if(current_player == -1) {
             std::cout << "[LOBBY " << lobbyId << "] It's not the player's turn or player not found." << std::endl;
             return -1;
       }
 
       if (lobby.validateAndApplyMove(x, y, current_player)) {
-            int client_socket_1 = lobby.getPlayerSocket1();
-            int client_socket_2 = lobby.getPlayerSocket2();
+            int clientSocket_1 = lobby.getPlayerSocket1();
+            int clientSocket_2 = lobby.getPlayerSocket2();
 
-            sendState(client_socket_1, lobby);
-            sendState(client_socket_2, lobby);
+            sendState(clientSocket_1, lobby);
+            sendState(clientSocket_2, lobby);
 
             int newStatus = lobby.getStatus();
 
             if (newStatus == ENDED_STATUS) {
                   std::string msg = "REV END " + std::to_string(lobby.calculateWinner()) + "\n";
-                  send(client_socket_1, msg.c_str(), msg.size(), 0);
-                  send(client_socket_2, msg.c_str(), msg.size(), 0);
+                  send(clientSocket_1, msg.c_str(), msg.size(), 0);
+                  send(clientSocket_2, msg.c_str(), msg.size(), 0);
             }
             else if (newStatus == current_player) {
                   std::string msg = "REV PASS\n"; 
-                  send(client_socket_1, msg.c_str(), msg.size(), 0);
-                  send(client_socket_2, msg.c_str(), msg.size(), 0);
+                  send(clientSocket_1, msg.c_str(), msg.size(), 0);
+                  send(clientSocket_2, msg.c_str(), msg.size(), 0);
             }
             
             return 0;
@@ -170,12 +187,12 @@ int handleMoving(int x, int y, int client_socket, int lobbyId) {
       }
 }
 
-int handleReconecting(int client_socket, Player& player, Lobby& lobby, int connectedUser) {
-      if(client_socket < 0 || &player == nullptr || &lobby == nullptr) {
+int handleReconecting(int clientSocket, Player& player, Lobby& lobby, int connectedUser) {
+      if(clientSocket < 0 || &player == nullptr || &lobby == nullptr) {
             return -1;
       }
 
-      sendStartingPlayerInfo(client_socket, lobby.getPlayer1Username(), lobby.getPlayer2Username(), lobby.getStatus(), lobby);
+      sendStartingPlayerInfo(clientSocket, lobby.getPlayer1Username(), lobby.getPlayer2Username(), lobby.getStatus(), lobby);
       sendReconnectInfo(connectedUser == 1 ? lobby.getPlayerSocket2() : lobby.getPlayerSocket1());
       return 0;
 }

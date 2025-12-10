@@ -112,8 +112,8 @@ int Lobby::setPlayer(Player* player) {
 
 
 // RELATED TO RECONNECTION
-bool Lobby::isUserConnected(int client_socket) {
-      if (player1 != nullptr && player1->socket == client_socket || player2 != nullptr && player2->socket == client_socket) {
+bool Lobby::isUserConnected(int clientSocket) {
+      if (player1 != nullptr && player1->socket == clientSocket || player2 != nullptr && player2->socket == clientSocket) {
             return true;
       }
       return false;
@@ -136,39 +136,42 @@ int Lobby::reconnectUser(Player new_player) {
 }
 
 void Lobby::removePlayer(int socket) {
-      if (status == ENDED_STATUS || status == PAUSE_STATUS) {
+      if(!socket || socket < 0) return;
+
+      if (status == 1 || status == 2) {
+            statusBeforePause = status;
+            status = PAUSE_STATUS;
+            
             if (player1 != nullptr && player1->socket == socket) {
-                  player1->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected." << std::endl;
+                  player1->socket = -1; 
+                  std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected. Game Paused." << std::endl;
             }
             else if (player2 != nullptr && player2->socket == socket) {
                   player2->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected." << std::endl;
+                  std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected. Game Paused." << std::endl;
+            }
+      }
+
+      else if (status == ENDED_STATUS || status == PAUSE_STATUS) {
+            
+            if (player1 != nullptr && player1->socket == socket) {
+                  player1 = nullptr; // Just detach. If they are offline, socket was -1 anyway.
+                  std::cout << "[LOBBY " << lobbyId << "] Player 1 left the lobby." << std::endl;
+            }
+            else if (player2 != nullptr && player2->socket == socket) {
+                  player2 = nullptr;
+                  std::cout << "[LOBBY " << lobbyId << "] Player 2 left the lobby." << std::endl;
             }
 
+            // A player is "Gone" if the pointer is null (Empty slot) 
+            // OR if the socket is -1 (Zombie/Disconnected player waiting for cleanup)
             bool p1Gone = (player1 == nullptr || player1->socket == -1);
-            
             bool p2Gone = (player2 == nullptr || player2->socket == -1);
 
             if (p1Gone && p2Gone) {
                   resetLobby();
             }
       }
-      else if (status == 1 || status == 2) {
-            statusBeforePause = status;
-            status = PAUSE_STATUS;
-            std::cout << "[LOBBY " << lobbyId << "] Game paused due to player disconnection." << std::endl;
-            if (player1->socket == socket) {
-                  player1->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << "] Player 1 disconnected." << std::endl;
-            }
-            else if (player2->socket == socket) {
-                  player2->socket = -1;
-                  std::cout << "[LOBBY " << lobbyId << "] Player 2 disconnected." << std::endl;
-            }
-      }
-
-      
 }
 
 
@@ -188,10 +191,10 @@ std::string Lobby::getBoardStateString() {
       return state;
 }
 
-int Lobby::canUserPlay(int client_socket) {
-      if (player1 != nullptr && player1->socket == client_socket && status == PLAYER_ONE) {
+int Lobby::canUserPlay(int clientSocket) {
+      if (player1 != nullptr && player1->socket == clientSocket && status == PLAYER_ONE) {
             return 1;
-      } else if (player2 != nullptr && player2->socket == client_socket && status == PLAYER_TWO) {
+      } else if (player2 != nullptr && player2->socket == clientSocket && status == PLAYER_TWO) {
             return 2;
       }
       return -1;
@@ -202,30 +205,24 @@ bool Lobby::validateAndApplyMove(int x, int y, int player) {
 
       if (processMove(x, y, board, player, true)) {
             
-            // Define who is who
             int opponent = (player == 1) ? 2 : 1;
             
-            // --- STEP A: Can the Opponent play? ---
             // We calculate hints for the OPPONENT now.
             if (getAvaiableMoves(board, opponent)) {
-                  // Standard case: Opponent has moves, so we switch turn.
                   setStatus(opponent);
             } 
             else {
-                  // --- STEP B: Opponent Cannot Play (PASS TURN) ---
+                  // Opponent Cannot Play (PASS TURN)
                   std::cout << "[LOBBY] Opponent " << opponent << " has no moves. Checking original player..." << std::endl;
 
-                  // We check if the ORIGINAL player can move again.
                   if (getAvaiableMoves(board, player)) {
-                        // Original player goes again (Opponent passes)
                         setStatus(player); 
                         std::cout << "[LOBBY] Turn passed back to Player " << player << std::endl;
                   } 
                   else {
-                        // --- STEP C: Neither can play (GAME OVER) ---
+                        // Neither can play (GAME OVER) ---
                         std::cout << "[LOBBY] No moves possible for anyone. GAME OVER." << std::endl;
                         setStatus(ENDED_STATUS);
-                        // Optional: Calculate final winner here if you want to store it
                   }
             }
             
@@ -243,42 +240,47 @@ int Lobby::calculateWinner() {
 }
 
 void Lobby::resetLobby() {
-      std::cout << "[LOBBY " << lobbyId << "] Resetting lobby" << std::endl;
+    std::cout << "[LOBBY " << lobbyId << "] Resetting lobby and cleaning up memory." << std::endl;
 
-      status = ENDED_STATUS;
-      statusBeforePause = ENDED_STATUS;
-      if (player1 != nullptr) {
-            player1 = nullptr;
-      }
-      if (player2 != nullptr) {
-            player2 = nullptr;
-      }
-      
-      /*for (int i = 0; i < 8; ++i) {
-            for (int j = 0; j < 8; ++j) {
-                  board[i][j] = 0;
-            }
-      }
+    status = ENDED_STATUS;
+    statusBeforePause = ENDED_STATUS;
 
-      board[3][3] = PLAYER_ONE; // Black
-      board[4][4] = PLAYER_ONE; // Black
-      board[3][4] = PLAYER_TWO; // White
-      board[4][3] = PLAYER_TWO; // White*/
+    // --- MEMORY CLEANUP  ---
+    if (player1 != nullptr) {
+        // If socket is -1, they are a Zombie (Disconnected). We MUST delete them.
+        if (player1->socket == -1) {
+            delete player1;
+            std::cout << "[LOBBY] Player 1 (Zombie) deleted from memory." << std::endl;
+        } else {
+            std::cout << "[LOBBY] Player 1 detached safely." << std::endl;
+        }
+        player1 = nullptr;
+    }
 
-      std::string customState = "3123000022212033221122133111112011222122111112112111111111111123";
+    if (player2 != nullptr) {
+        if (player2->socket == -1) {
+            delete player2;
+            std::cout << "[LOBBY] Player 2 (Zombie) deleted from memory." << std::endl;
+        } else {
+            std::cout << "[LOBBY] Player 2 detached safely." << std::endl;
+        }
+        player2 = nullptr;
+    }
 
-      for (int i = 0; i < 64; ++i) {
-            int row = i / 8;
-            int col = i % 8;
-            
-            int val = customState[i] - '0';
+    std::string customState = "3123000022212033221122133111112011222122111112112111111111111123";
 
-            if (val == 3) {
-                  board[row][col] = 0;
-            } else {
-                  board[row][col] = val;
-            }
-      }
+    for (int i = 0; i < 64; ++i) {
+        int row = i / 8;
+        int col = i % 8;
+        
+        int val = customState[i] - '0';
 
-      getAvaiableMoves(board, PLAYER_ONE);
+        if (val == 3) {
+            board[row][col] = 0;
+        } else {
+            board[row][col] = val;
+        }
+    }
+
+    getAvaiableMoves(board, PLAYER_ONE);
 }

@@ -10,6 +10,6 @@
 #define ENDED_STATUS 0
 
 extern std::vector<Lobby> lobbies;
-extern std::vector<int> client_sockets;
+extern std::vector<int> clientSockets;
 extern std::mutex clients_mutex;
 extern std::mutex lobbies_mutex;

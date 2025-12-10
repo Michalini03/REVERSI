@@ -13,6 +13,6 @@ void startServer();
  * @brief The main thread function for a single connected client.
  * * Handles the TCP receive loop, buffering data to fix packet coalescing,
  * and managing the lifecycle of the Player object (memory allocation/cleanup).
- * * @param client_socket The file descriptor for the connected client.
+ * * @param clientSocket The file descriptor for the connected client.
  */
-void handleClientLogic(int client_socket);
+void handleClientLogic(int clientSocket);

@@ -22,15 +22,15 @@ public:
       std::string getPlayer2Username();
 
       // Connection-related methods c
-      bool isUserConnected(int client_socket);
+      bool isUserConnected(int clientSocket);
       int reconnectUser(Player new_player);
       void removePlayer(int socket);
       void resetLobby();
 
       // Game-related methods
-      int canUserPlay(int client_socket);
+      int canUserPlay(int clientSocket);
       int calculateWinner();
-      bool validateAndApplyMove(int x, int y, int client_socket);
+      bool validateAndApplyMove(int x, int y, int clientSocket);
       std::string getBoardStateString();
 private:
       int statusBeforePause;
