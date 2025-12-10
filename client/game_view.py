@@ -9,7 +9,7 @@ WINDOW_HEIGHT = 720
 BOARD_SIZE = 8
 # --- New constant for the UI sidebar ---
 UI_WIDTH = WINDOW_WIDTH - GAME_WIDTH  # This is 200px
-RIGHT_MARGIN = UI_WIDTH // 10
+RIGHT_MARGIN = UI_WIDTH // 7.5
 
 PREFIX = "REV"
 
@@ -30,7 +30,7 @@ class GameView(arcade.View):
         self.manager = arcade.gui.UIManager()
 
         # Variables that will hold sprite lists
-        self.current_player = current_player
+        self.active_player = 0
 
         self.lobby_id = lobby_id
         self.username_one = username_one
@@ -42,7 +42,9 @@ class GameView(arcade.View):
         # --- Store UI labels to update them later ---
         self.player1_score_label = None
         self.player2_score_label = None
+        self.status_label = None
         self.pause_box = None
+        self.end_box = None
 
         # Set up the player info
         self.board = Board()
@@ -81,6 +83,35 @@ class GameView(arcade.View):
         if self.board:
             self.board.draw()
         self.manager.draw()
+        
+        dot_x = WINDOW_WIDTH - UI_WIDTH + 30 
+        
+        target_y = 0
+        
+        if self.active_player == 1:
+            # WINDOW_HEIGHT - Margin - Half Height of Box
+            target_y = WINDOW_HEIGHT - RIGHT_MARGIN - 50 
+            
+        elif self.active_player == 2:
+            # You might need to adjust '160' depending on your box height/spacing
+            target_y = WINDOW_HEIGHT - RIGHT_MARGIN - 160
+
+        # Draw the dot if we have a valid target
+        if target_y > 0:
+            arcade.draw_circle_filled(
+                center_x=dot_x, 
+                center_y=target_y, 
+                radius=8, 
+                color=arcade.color.BRIGHT_GREEN
+            )
+            
+        arcade.draw_circle_outline(
+            center_x=dot_x, 
+            center_y=target_y, 
+            radius=8, 
+            color=arcade.color.WHITE, 
+            border_width=2
+        )
         
     def show_server_error_popup(self):
         """
@@ -126,6 +157,46 @@ class GameView(arcade.View):
             pass
         
         self.manager.add(self.pause_box)
+        
+    def show_game_over_popup(self, winner_id):
+        """Shows who won and lets user leave, quit, or rematch"""
+        
+        if winner_id == 3:
+            result_text = "It's a Draw!"
+        else:
+            winner_text = "Black (Player 1)" if winner_id == 1 else "White (Player 2)"
+            result_text = f"Winner: {winner_text}"
+            
+        self.end_box = arcade.gui.UIMessageBox(
+            width=500,
+            height=300,
+            message_text=f"GAME OVER\n\n{result_text}",
+            buttons=["Rematch", "Menu", "Quit"]
+        )
+        
+        @self.end_box.event("on_action")
+        def on_close(event):
+            action = event.action
+            
+            if action == "Quit":
+                arcade.exit()
+                
+            elif action == "Menu":
+                try:
+                    self.client_socket.sendall(f"{PREFIX} EXIT {self.lobby_id}\n".encode())
+                except:
+                    pass
+                from lobby_list_view import LobbyListView
+                self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            
+            elif action == "Rematch":
+                print("[GameView] Rematch requested.")
+                try:
+                    self.client_socket.sendall(f"{PREFIX} REMATCH {self.lobby_id}\n".encode())
+                except:
+                    pass
+                
+        self.manager.add(self.end_box)
 
 
     def on_update(self, delta_time):
@@ -147,12 +218,15 @@ class GameView(arcade.View):
                 command = params[1]
                 if command == "STATE":
                     self.board.set_state(params[2])
+                    self.active_player = 2 if self.active_player == 1 else 1
                     score1 = params[3]
                     score2 = params[4] 
                     if self.player1_score_label:
                         self.player1_score_label.text = str(score1)
                     if self.player2_score_label:
-                        self.player2_score_label.text = str(score2)                        
+                        self.player2_score_label.text = str(score2)
+                    if self.status_label:
+                        self.status_label.text = ""                      
                 elif command == "SERVER_DISCONNECT":
                     print("[GameView] Disconnected from server.")
                     self.show_server_error_popup()
@@ -166,6 +240,14 @@ class GameView(arcade.View):
                         self.manager.remove(self.pause_box)
                         self.pause_box = None
                         print("[GameView] Opponent reconnected. ")
+                elif command == "PASS":
+                    if self.status_label:
+                        self.status_label.text = "No moves available!\nTurn passed to opponent."
+                    self.active_player = 2 if self.active_player == 1 else 1
+                    print("[GameView] Turn passed.")
+                elif command == "END":
+                    winner_id = int(params[2])
+                    self.show_game_over_popup(winner_id)
                 else:
                     print("[GameView] Unexpected command from server.")
 
@@ -261,6 +343,26 @@ class GameView(arcade.View):
             player_color=arcade.color.WHITE
         )
         ui_box.add(player2_group)
+        
+        # --- Status handler ---
+        status_box = arcade.gui.UIBoxLayout(
+            vertical=True, 
+            padding=(10, 10, 10, 10),
+            bg_color=(20, 20, 20, 200)
+        )
+        
+        self.status_label = arcade.gui.UILabel(
+            text="Game Started",
+            width=UI_WIDTH - RIGHT_MARGIN - 20,
+            font_size=14,
+            font_name="Arial",
+            text_color=arcade.color.YELLOW,
+            align="center",
+            multiline=True
+        )
+        status_box.add(self.status_label)
+        
+        ui_box.add(status_box)
 
         self.ui_anchor_layout.add(
             child=ui_box,

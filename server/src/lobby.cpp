@@ -19,7 +19,7 @@ Lobby::Lobby(int id) {
       this->player1 = nullptr;
       this->player2 = nullptr;
       
-      for (int i = 0; i < 8; ++i) {
+      /**for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
                   board[i][j] = 0;
             }
@@ -28,7 +28,22 @@ Lobby::Lobby(int id) {
       board[3][3] = PLAYER_ONE; // Black
       board[4][4] = PLAYER_ONE; // Black
       board[3][4] = PLAYER_TWO; // White
-      board[4][3] = PLAYER_TWO; // White
+      board[4][3] = PLAYER_TWO; // White*/
+
+      std::string customState = "3123000022212033221122133111112011222122111112112111111111111123";
+
+      for (int i = 0; i < 64; ++i) {
+            int row = i / 8;
+            int col = i % 8;
+            
+            int val = customState[i] - '0';
+
+            if (val == 3) {
+                  board[row][col] = 0;
+            } else {
+                  board[row][col] = val;
+            }
+      }
 
       getAvaiableMoves(board, PLAYER_ONE);
 }
@@ -233,15 +248,13 @@ void Lobby::resetLobby() {
       status = ENDED_STATUS;
       statusBeforePause = ENDED_STATUS;
       if (player1 != nullptr) {
-            delete player1;
             player1 = nullptr;
       }
       if (player2 != nullptr) {
-            delete player2;
             player2 = nullptr;
       }
       
-      for (int i = 0; i < 8; ++i) {
+      /*for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
                   board[i][j] = 0;
             }
@@ -250,7 +263,22 @@ void Lobby::resetLobby() {
       board[3][3] = PLAYER_ONE; // Black
       board[4][4] = PLAYER_ONE; // Black
       board[3][4] = PLAYER_TWO; // White
-      board[4][3] = PLAYER_TWO; // White
+      board[4][3] = PLAYER_TWO; // White*/
+
+      std::string customState = "3123000022212033221122133111112011222122111112112111111111111123";
+
+      for (int i = 0; i < 64; ++i) {
+            int row = i / 8;
+            int col = i % 8;
+            
+            int val = customState[i] - '0';
+
+            if (val == 3) {
+                  board[row][col] = 0;
+            } else {
+                  board[row][col] = val;
+            }
+      }
 
       getAvaiableMoves(board, PLAYER_ONE);
 }

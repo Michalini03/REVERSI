@@ -14,3 +14,9 @@ Semestral work for class 'Introduction to computer network'
 
 - Save requirements: pip freeze > requirements.txt
 - Run requirements: pip install -r requirements.txt
+
+
+### TODO:
+- Weird bug when leaving and joining lobby
+- Winner end screen
+- Heartbeat

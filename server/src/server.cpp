@@ -90,12 +90,12 @@ void handleClientLogic(int client_socket) {
             
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
-                bool found = false;
+                bool memoryRetained = false;
                 for (auto &lobby : lobbies) {
                     if (lobby.getPlayerSocket1() == client_socket || lobby.getPlayerSocket2() == client_socket) {
-                        found = true;
                         lobby.removePlayer(client_socket);
                         if(lobby.getStatus() == PAUSE_STATUS) {
+                            memoryRetained = true;
                             int disconnected_user = -1;
                             int connected_oponent_socket = - 1;
                             if(lobby.getPlayerSocket1() == -1) {
@@ -107,10 +107,11 @@ void handleClientLogic(int client_socket) {
                                 connected_oponent_socket = lobby.getPlayerSocket1();
                             }
                             sendDisconnectInfo(connected_oponent_socket, disconnected_user);
+                            break;
                         }
                     }
                 }
-                if (!found) delete new_player;
+                if (!memoryRetained) delete new_player;
             }
             break; 
         }

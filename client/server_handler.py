@@ -16,35 +16,29 @@ def connect_to_server(server_address=SERVER_ADRESS, port=PORT):
 
 def start_receive_thread(client_socket, server_queue):
     """
-    This function will run in a separate thread.
-    It handles connecting to the server and the
-    infinite loop for sending/receiving messages.
+    Handles receiving data. Uses a buffer to fix split packets.
     """
-
+    buffer = ""
     try:
-        # This is the infinite loop you wanted
         while True:
-
-            # Wait for a response from the server
             data = client_socket.recv(1024)
             if not data:
-                # Server disconnected
                 print("[Server Thread] Server closed the connection.")
                 break
 
-            # Print the server's response
-            full_message: str = data.decode('utf-8')
-            messages = full_message.split("\n")
-            for message in messages:
-                if message is not None or message.strip() != "":
-                    server_queue.put(message)
+            buffer += data.decode('utf-8')
+
+            # Process all complete messages in the buffer
+            while "\n" in buffer:
+                message, buffer = buffer.split("\n", 1)
+                if message.strip():
+                    server_queue.put(message.strip())
 
     except (ConnectionResetError, BrokenPipeError):
         print("[Server Thread] Connection to server was lost.")
     except Exception as e:
         print(f"[Server Thread] An error occurred: {e}")
     finally:
-        # Clean up and close the socket when the loop ends
         if client_socket:
             client_socket.close()
         server_queue.put("REV SERVER_DISCONNECT")
