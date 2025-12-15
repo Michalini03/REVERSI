@@ -79,13 +79,13 @@ void handleClientLogic(int clientSocket) {
     char tempBuffer[1024];
 
     // Create new player
-    Player *new_player = new Player(clientSocket);
+    Player *new_player = nullptr;
 
     while(true) {
         memset(tempBuffer, 0, 1024);
         int valread = read(clientSocket, tempBuffer, 1024);
         
-        if (valread <= 0 || new_player->tolerance > 3) {
+        if (valread <= 0 || (new_player != nullptr && new_player->tolerance > 3)) {
             std::cout << "Client " << clientSocket << " disconnected." << std::endl;
             
             {
@@ -115,6 +115,11 @@ void handleClientLogic(int clientSocket) {
             }
             break; 
         }
+
+        if (new_player == nullptr) {
+            new_player = new Player(clientSocket);
+        }
+
         dataBuffer.append(tempBuffer, valread);
         size_t pos = 0;
         while ((pos = dataBuffer.find('\n')) != std::string::npos) {

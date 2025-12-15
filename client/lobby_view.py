@@ -7,7 +7,7 @@ from lobby_list_view import LobbyListView
 
 GAME_PREFIX = "REV"
 DEFAULT_IP = "127.0.0.1"
-DEFAULT_PORT = 9999
+DEFAULT_PORT = 10001
 
 
 class QuietInputText(arcade.gui.UIInputText):
@@ -85,7 +85,7 @@ class LobbyView(arcade.View):
             anchor_x="center",
             anchor_y="center"
         )
-        
+
         self.manager.add(self.anchor_layout)
 
         # --- Event Handler ---
@@ -93,66 +93,66 @@ class LobbyView(arcade.View):
         def on_click_start(event):
             self.connect_and_start()
 
-
     def show_error_popup(self, error_message):
         """
-        Shows an Error modal popup using UIMessageBox 
+        Shows an Error modal popup using UIMessageBox
         """
-        self.manager.focused_element = None 
-        
+        self.manager.focused_element = None
+
         message_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
             message_text=error_message,
             buttons=["OK"]
         )
-        
+
         @message_box.event("on_action")
         def on_message_box_close(event):
             pass
-        
-        self.manager.add(message_box)
 
+        self.manager.add(message_box)
 
     def connect_and_start(self):
         self.username = self.username_input.text
         target_ip = self.ip_input.text
-        
+
         is_valid = self.valid_values(target_ip, self.port_input.text, self.username)
         if not is_valid[0]:
             self.show_error_popup(is_valid[1])
             return
-        
-        target_port = int(self.port_input.text)
 
-        print(f"Connecting to {target_ip}:{target_port}...")
+        target_port = int(self.port_input.text)
 
         # 3. Attempt Connection
         client_socket = connect_to_server(target_ip, target_port)
-        
+
         if client_socket is None:
             print("[Main Thread] FAILED to connect.")
             self.show_error_popup(f"Connection Failed.\n\nCould not reach:\n{target_ip}:{target_port}")
             return
 
         print("[Main Thread] Successfully connected.")
+        self.client_socket = client_socket
         self.server_queue = queue.Queue()
-        
+
+        import time
+        time.sleep(0.05)
+
+        try:
+            print(f"[Main Thread] Sending CREATE for {self.username}...")
+            message = f"{GAME_PREFIX} CREATE {self.username}\n"
+            self.client_socket.sendall(message.encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending login: {e}")
+            self.client_socket.close()
+            return
+
         receive_thread = threading.Thread(
             target=start_receive_thread,
             args=(client_socket, self.server_queue),
             daemon=True
         )
         receive_thread.start()
-
-        self.client_socket = client_socket
-        
-        # Send join message
-        try:
-            message = f"{GAME_PREFIX} CREATE {self.username}\n"
-            self.client_socket.sendall(message.encode('utf-8'))
-        except Exception as e:
-            self.show_error_popup(f"Socket Error: {e}")
 
     def on_show_view(self):
         self.manager.enable()
@@ -190,6 +190,10 @@ class LobbyView(arcade.View):
                         game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id)
                         self.window.show_view(game_view)
                         return
+                    elif params[1] == "SERVER_DISCONNECT":
+                        self.show_error_popup("Disconnected from server.")
+                    else:
+                        print(f"[WARNING] Unknown command received: {message}")
             except queue.Empty:
                 pass
 

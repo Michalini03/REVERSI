@@ -11,6 +11,9 @@ public:
       Player* player1;
       Player* player2;
 
+      bool p1WantsRematch;
+      bool p2WantsRematch;
+
       // Getters and Setters
       int getId() const;
       int getStatus() const;
@@ -32,6 +35,10 @@ public:
       int calculateWinner();
       bool validateAndApplyMove(int x, int y, int clientSocket);
       std::string getBoardStateString();
+
+      // Rematch methods
+      void setRematch(int playerNum);
+      void restartGame();
 private:
       int statusBeforePause;
       int lobbyId;

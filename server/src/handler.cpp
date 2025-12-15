@@ -101,7 +101,7 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
             if (args.size() != 3) throw std::runtime_error("Invalid REMATCH args");
 
             int lobbyId = std::stoi(args[2]);
-            // TODO: Implement Rematch Logic
+            handleRematch(clientSocket, lobbyId);
         }
         else {
             std::cout << "[SECURITY] Unknown command: " << command << std::endl;
@@ -142,7 +142,23 @@ int handleLobbyExit(int clientSocket, int lobbyId) {
 
     std::lock_guard<std::mutex> lock(lobbies_mutex);
     Lobby &lobby = lobbies[lobbyId];
+    
+    int opponentSocket = -1;
+    int leaverId = 0;
+
+    if (lobby.getPlayerSocket1() == clientSocket) {
+        leaverId = 1;
+        opponentSocket = lobby.getPlayerSocket2();
+    } 
+    else if (lobby.getPlayerSocket2() == clientSocket) {
+        leaverId = 2;
+        opponentSocket = lobby.getPlayerSocket1();
+    }
+
     lobby.removePlayer(clientSocket);
+    if (opponentSocket != -1) {
+        sendDisconnectInfo(opponentSocket, leaverId);
+    }
     return 0;
 }
 
@@ -170,14 +186,14 @@ int handleMoving(int x, int y, int clientSocket, int lobbyId) {
             int newStatus = lobby.getStatus();
 
             if (newStatus == ENDED_STATUS) {
-                  std::string msg = "REV END " + std::to_string(lobby.calculateWinner()) + "\n";
-                  send(clientSocket_1, msg.c_str(), msg.size(), 0);
-                  send(clientSocket_2, msg.c_str(), msg.size(), 0);
+                std::string msg = "REV END " + std::to_string(lobby.calculateWinner()) + "\n";
+                send(clientSocket_1, msg.c_str(), msg.size(), 0);
+                send(clientSocket_2, msg.c_str(), msg.size(), 0);
             }
             else if (newStatus == current_player) {
-                  std::string msg = "REV PASS\n"; 
-                  send(clientSocket_1, msg.c_str(), msg.size(), 0);
-                  send(clientSocket_2, msg.c_str(), msg.size(), 0);
+                std::string msg = "REV PASS\n"; 
+                send(clientSocket_1, msg.c_str(), msg.size(), 0);
+                send(clientSocket_2, msg.c_str(), msg.size(), 0);
             }
             
             return 0;
@@ -196,6 +212,30 @@ int handleReconecting(int clientSocket, Player& player, Lobby& lobby, int connec
       sendReconnectInfo(connectedUser == 1 ? lobby.getPlayerSocket2() : lobby.getPlayerSocket1());
       return 0;
 }
+
+int handleRematch(int clientSocket, int lobbyId) {
+    if(clientSocket < 0 || lobbyId < 0 || lobbyId > LOBBY_COUNT) {
+        return -1;
+    }
+
+    std::lock_guard<std::mutex> lock(lobbies_mutex);
+    Lobby &lobby = lobbies[lobbyId];
+    lobby.setRematch(clientSocket);
+
+    if (lobby.p1WantsRematch && lobby.p2WantsRematch) {
+        // START GAME
+        lobby.restartGame();
+        
+        std::string name1 = lobby.getPlayer1Username();
+        std::string name2 = lobby.getPlayer2Username();
+        
+        sendStartingPlayerInfo(lobby.getPlayerSocket1(), name1, name2, 1, lobby);
+        sendStartingPlayerInfo(lobby.getPlayerSocket2(), name1, name2, 1, lobby);
+    } 
+    
+    return 0;
+}
+
 
 void startGame(int lobbyIndex) {
       std::lock_guard<std::mutex> lock(lobbies_mutex);

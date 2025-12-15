@@ -66,6 +66,8 @@ int handleMoving(int x, int y, int clientSocket, int lobbyId);
  */
 int handleReconecting(int clientSocket, Player& player, Lobby& lobby, int connectedUser);
 
+int handleRematch(int clientSocket, int lobbyId);
+
 /**
  * @brief Starts the match in a specific lobby.
  * * Sets the lobby status to Active and sends the "REV START" command

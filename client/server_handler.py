@@ -1,7 +1,7 @@
 import socket
 
 SERVER_ADRESS = "127.0.0.1"
-PORT = 9999
+PORT = 10001
 
 
 def connect_to_server(server_address=SERVER_ADRESS, port=PORT):

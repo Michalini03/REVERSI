@@ -17,6 +17,4 @@ Semestral work for class 'Introduction to computer network'
 
 
 ### TODO:
-- Weird bug when leaving and joining lobby
-- Winner end screen
 - Heartbeat

@@ -3,7 +3,7 @@
 #include <mutex>
 #include "../include/lobby.h"
 
-#define PORT 9999
+#define PORT 10001
 #define LOBBY_COUNT 5
 #define PREFIX_GAME "REV"
 #define PAUSE_STATUS 3

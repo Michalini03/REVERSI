@@ -18,6 +18,9 @@ Lobby::Lobby(int id) {
       this->statusBeforePause = 0;
       this->player1 = nullptr;
       this->player2 = nullptr;
+
+      this->p1WantsRematch = false;
+      this->p2WantsRematch = false;
       
       /**for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
@@ -138,6 +141,9 @@ int Lobby::reconnectUser(Player new_player) {
 void Lobby::removePlayer(int socket) {
       if(!socket || socket < 0) return;
 
+      p1WantsRematch = false;
+      p2WantsRematch = false;
+
       if (status == 1 || status == 2) {
             statusBeforePause = status;
             status = PAUSE_STATUS;
@@ -187,7 +193,7 @@ std::string Lobby::getBoardStateString() {
       int score1 = getScoreForPlayer(PLAYER_ONE, board);
       int score2 = getScoreForPlayer(PLAYER_TWO, board);
 
-      state += " " + std::to_string(score1) + " " + std::to_string(score2);
+      state += " " + std::to_string(score1) + " " + std::to_string(score2) + " " + std::to_string(status);
       return state;
 }
 
@@ -213,15 +219,15 @@ bool Lobby::validateAndApplyMove(int x, int y, int player) {
             } 
             else {
                   // Opponent Cannot Play (PASS TURN)
-                  std::cout << "[LOBBY] Opponent " << opponent << " has no moves. Checking original player..." << std::endl;
+                  std::cout << "[LOBBY " << lobbyId << "] Opponent " << opponent << " has no moves. Checking original player..." << std::endl;
 
                   if (getAvaiableMoves(board, player)) {
                         setStatus(player); 
-                        std::cout << "[LOBBY] Turn passed back to Player " << player << std::endl;
+                        std::cout << "[LOBBY " << lobbyId << "] Turn passed back to Player " << player << std::endl;
                   } 
                   else {
                         // Neither can play (GAME OVER) ---
-                        std::cout << "[LOBBY] No moves possible for anyone. GAME OVER." << std::endl;
+                        std::cout << "[LOBBY " << lobbyId << "] No moves possible for anyone. GAME OVER." << std::endl;
                         setStatus(ENDED_STATUS);
                   }
             }
@@ -250,9 +256,9 @@ void Lobby::resetLobby() {
         // If socket is -1, they are a Zombie (Disconnected). We MUST delete them.
         if (player1->socket == -1) {
             delete player1;
-            std::cout << "[LOBBY] Player 1 (Zombie) deleted from memory." << std::endl;
+            std::cout << "[LOBBY " << lobbyId << "] Player 1 (Zombie) deleted from memory." << std::endl;
         } else {
-            std::cout << "[LOBBY] Player 1 detached safely." << std::endl;
+            std::cout << "[LOBBY " << lobbyId << "] Player 1 detached safely." << std::endl;
         }
         player1 = nullptr;
     }
@@ -260,9 +266,9 @@ void Lobby::resetLobby() {
     if (player2 != nullptr) {
         if (player2->socket == -1) {
             delete player2;
-            std::cout << "[LOBBY] Player 2 (Zombie) deleted from memory." << std::endl;
+            std::cout << "[LOBBY " << lobbyId << "] Player 2 (Zombie) deleted from memory." << std::endl;
         } else {
-            std::cout << "[LOBBY] Player 2 detached safely." << std::endl;
+            std::cout << "[LOBBY " << lobbyId << "] Player 2 detached safely." << std::endl;
         }
         player2 = nullptr;
     }
@@ -281,6 +287,34 @@ void Lobby::resetLobby() {
             board[row][col] = val;
         }
     }
+
+    getAvaiableMoves(board, PLAYER_ONE);
+}
+
+void Lobby::setRematch(int playerSocket) {
+    if (playerSocket == player1->socket) p1WantsRematch = true;
+    if (playerSocket == player2->socket) p2WantsRematch = true;
+}
+
+void Lobby::restartGame() {
+    std::cout << "[LOBBY " << lobbyId << "] Restarting game (Rematch)." << std::endl;
+
+    p1WantsRematch = false;
+    p2WantsRematch = false;
+    status = 1; // Set back to Active Game
+
+    // Clear Board
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            board[i][j] = 0;
+        }
+    }
+
+    // Re-initialize Pieces (Standard or Custom State)
+    board[3][3] = PLAYER_ONE;
+    board[4][4] = PLAYER_ONE;
+    board[3][4] = PLAYER_TWO;
+    board[4][3] = PLAYER_TWO;
 
     getAvaiableMoves(board, PLAYER_ONE);
 }
