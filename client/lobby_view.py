@@ -2,7 +2,7 @@ import arcade
 import arcade.gui
 import queue
 import threading
-from server_handler import connect_to_server, start_receive_thread
+from server_handler import connect_to_server, start_receive_thread, start_heartbeat_thread
 from lobby_list_view import LobbyListView
 
 GAME_PREFIX = "REV"
@@ -153,6 +153,13 @@ class LobbyView(arcade.View):
             daemon=True
         )
         receive_thread.start()
+        
+        heartbeat_thread = threading.Thread(
+            target=start_heartbeat_thread,
+            args=(client_socket, self.server_queue,),
+            daemon=True
+        )
+        heartbeat_thread.start()
 
     def on_show_view(self):
         self.manager.enable()

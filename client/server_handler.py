@@ -1,4 +1,5 @@
 import socket
+import time
 
 SERVER_ADRESS = "127.0.0.1"
 PORT = 10001
@@ -45,9 +46,20 @@ def start_receive_thread(client_socket, server_queue):
         print("[Server Thread] Disconnected.")
 
 
-def send_message(client_socket, message):
-    """ Send a message to the server. """
+def start_heartbeat_thread(client_socket, server_queue, interval=5):
+    print(f"[Heartbeat] Thread started. Pinging every {interval}s.")
     try:
-        client_socket.sendall(message.encode('utf-8'))
-    except Exception as e:
-        print(f"[Send Message] Error sending message: {e}")
+        while True:
+            time.sleep(interval)
+            message = "REV HEARTBEAT\n"
+            client_socket.sendall(message.encode('utf-8'))
+
+    except (ConnectionResetError, BrokenPipeError, OSError) as e:
+        print(f"[Heartbeat] Network fail: {e}")
+        server_queue.put("REV SERVER_DISCONNECT")
+        try:
+            client_socket.close()
+        except Exception as e:
+            print(f"[Heartbeat] An error occurred: {e}")
+        finally:
+            return

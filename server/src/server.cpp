@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cstring>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <thread>
@@ -81,23 +82,32 @@ void handleClientLogic(int clientSocket) {
     // Create new player
     Player *new_player = nullptr;
 
+    // 8s timeout for pingpong
+    struct timeval tv;
+    tv.tv_sec = 8;
+    tv.tv_usec = 0;
+
+    if (setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) < 0) {
+        perror("Error setting socket timeout");
+    }
+
     while(true) {
         memset(tempBuffer, 0, 1024);
         int valread = read(clientSocket, tempBuffer, 1024);
         
         if (valread <= 0 || (new_player != nullptr && new_player->tolerance > 3)) {
             std::cout << "Client " << clientSocket << " disconnected." << std::endl;
-            
+            bool memoryRetained = false;
+            int disconnected_user = -1;
+            int connected_oponent_socket = -1;
             {
                 std::lock_guard<std::mutex> lock(lobbies_mutex);
-                bool memoryRetained = false;
+                
                 for (auto &lobby : lobbies) {
                     if (lobby.getPlayerSocket1() == clientSocket || lobby.getPlayerSocket2() == clientSocket) {
                         lobby.removePlayer(clientSocket);
                         if(lobby.getStatus() == PAUSE_STATUS) {
                             memoryRetained = true;
-                            int disconnected_user = -1;
-                            int connected_oponent_socket = - 1;
                             if(lobby.getPlayerSocket1() == -1) {
                                 disconnected_user = 1;
                                 connected_oponent_socket = lobby.getPlayerSocket2();
@@ -106,12 +116,17 @@ void handleClientLogic(int clientSocket) {
                                 disconnected_user = 2;
                                 connected_oponent_socket = lobby.getPlayerSocket1();
                             }
-                            sendDisconnectInfo(connected_oponent_socket, disconnected_user);
-                            break;
                         }
+                        break;
                     }
                 }
-                if (!memoryRetained) delete new_player;
+            }
+
+            if (!memoryRetained) {
+                delete new_player;
+            }
+            else {
+                sendDisconnectInfo(connected_oponent_socket, disconnected_user);
             }
             break; 
         }

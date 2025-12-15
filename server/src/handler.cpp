@@ -103,6 +103,9 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
             int lobbyId = std::stoi(args[2]);
             handleRematch(clientSocket, lobbyId);
         }
+        else if (command == "HEARTBEAT") {
+            return;
+        }
         else {
             std::cout << "[SECURITY] Unknown command: " << command << std::endl;
         }
@@ -118,16 +121,20 @@ int handleLobbyJoin(int clientSocket, int lobbyId, Player& player) {
         return -1; 
     }
 
-    std::lock_guard<std::mutex> lock(lobbies_mutex);
-    for (auto &lobby : lobbies) {
-        if (lobby.isUserConnected(clientSocket)) {
-            std::cout << "[SERVER] User already connected to a lobby." << std::endl;
-            return -1;
+    int result;
+    Lobby *lobbyPtr = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(lobbies_mutex);
+        for (auto &lobby : lobbies) {
+            if (lobby.isUserConnected(clientSocket)) {
+                std::cout << "[SERVER] User already connected to a lobby." << std::endl;
+                return -1;
+            }
         }
+
+        lobbyPtr = &lobbies[lobbyId];
+        result = lobbyPtr->setPlayer(&player);
     }
-    
-    Lobby &lobby = lobbies[lobbyId];
-    int result = lobby.setPlayer(&player);
 
     if(result > 0) {
         sendConnectInfo(clientSocket, result);
@@ -140,22 +147,26 @@ int handleLobbyExit(int clientSocket, int lobbyId) {
     if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) return -1;
     if (clientSocket < 0) return -1;
 
-    std::lock_guard<std::mutex> lock(lobbies_mutex);
-    Lobby &lobby = lobbies[lobbyId];
-    
+    Lobby *lobby = nullptr;
     int opponentSocket = -1;
     int leaverId = 0;
-
-    if (lobby.getPlayerSocket1() == clientSocket) {
-        leaverId = 1;
-        opponentSocket = lobby.getPlayerSocket2();
-    } 
-    else if (lobby.getPlayerSocket2() == clientSocket) {
-        leaverId = 2;
-        opponentSocket = lobby.getPlayerSocket1();
+    
+    {
+        std::lock_guard<std::mutex> lock(lobbies_mutex);
+        lobby = &lobbies[lobbyId];
+    
+        if (lobby->getPlayerSocket1() == clientSocket) {
+            leaverId = 1;
+            opponentSocket = lobby->getPlayerSocket2();
+        } 
+        else if (lobby->getPlayerSocket2() == clientSocket) {
+            leaverId = 2;
+            opponentSocket = lobby->getPlayerSocket1();
+        }
+    
+        lobby->removePlayer(clientSocket);
     }
 
-    lobby.removePlayer(clientSocket);
     if (opponentSocket != -1) {
         sendDisconnectInfo(opponentSocket, leaverId);
     }
@@ -163,44 +174,55 @@ int handleLobbyExit(int clientSocket, int lobbyId) {
 }
 
 int handleMoving(int x, int y, int clientSocket, int lobbyId) {
-      if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) return -1;
-      if (x < 0 || x >=8 || y < 0 || y >=8) return -1; 
-      if (clientSocket < 0) return -1; 
-      
-      std::lock_guard<std::mutex> lock(lobbies_mutex);
-      Lobby &lobby = lobbies[lobbyId];
+    if (lobbyId < 0 || lobbyId >= LOBBY_COUNT) return -1;
+    if (x < 0 || x >= 8 || y < 0 || y >= 8) return -1;
+    if (clientSocket < 0) return -1;
 
-      int current_player = lobby.canUserPlay(clientSocket);
-      if(current_player == -1) {
-            std::cout << "[LOBBY " << lobbyId << "] It's not the player's turn or player not found." << std::endl;
+    int clientSocket1 = -1, clientSocket2 = -1;
+    bool valid = false;
+    std::string boardStateMsg; // We will store the message here safely
+    std::string extraMsg;      // For END or PASS
+    
+    Lobby *lobby = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(lobbies_mutex);
+        lobby = &lobbies[lobbyId];
+
+        int currentPlayer = lobby->canUserPlay(clientSocket);
+        if(currentPlayer == -1) {
+            std::cout << "[LOBBY " << lobbyId << "] Not player's turn." << std::endl;
             return -1;
-      }
+        }
 
-      if (lobby.validateAndApplyMove(x, y, current_player)) {
-            int clientSocket_1 = lobby.getPlayerSocket1();
-            int clientSocket_2 = lobby.getPlayerSocket2();
+        valid = lobby->validateAndApplyMove(x, y, currentPlayer);
 
-            sendState(clientSocket_1, lobby);
-            sendState(clientSocket_2, lobby);
+        if (valid) {
+            clientSocket1 = lobby->getPlayerSocket1();
+            clientSocket2 = lobby->getPlayerSocket2();
+            int newStatus = lobby->getStatus();
 
-            int newStatus = lobby.getStatus();
+
+            boardStateMsg = "REV STATE " + lobby->getBoardStateString() + "\n";
 
             if (newStatus == ENDED_STATUS) {
-                std::string msg = "REV END " + std::to_string(lobby.calculateWinner()) + "\n";
-                send(clientSocket_1, msg.c_str(), msg.size(), 0);
-                send(clientSocket_2, msg.c_str(), msg.size(), 0);
+                extraMsg = "REV END " + std::to_string(lobby->calculateWinner()) + "\n";
+            } else if (newStatus == currentPlayer) {
+                extraMsg = "REV PASS\n";
             }
-            else if (newStatus == current_player) {
-                std::string msg = "REV PASS\n"; 
-                send(clientSocket_1, msg.c_str(), msg.size(), 0);
-                send(clientSocket_2, msg.c_str(), msg.size(), 0);
-            }
-            
-            return 0;
-      }
-      else {
-            return 0;
-      }
+        }
+    }
+
+    if (valid) {
+        if(clientSocket1 != -1) send(clientSocket1, boardStateMsg.c_str(), boardStateMsg.size(), 0);
+        if(clientSocket2 != -1) send(clientSocket2, boardStateMsg.c_str(), boardStateMsg.size(), 0);
+
+        if (!extraMsg.empty()) {
+            if(clientSocket1 != -1) send(clientSocket1, extraMsg.c_str(), extraMsg.size(), 0);
+            if(clientSocket2 != -1) send(clientSocket2, extraMsg.c_str(), extraMsg.size(), 0);
+        }
+    }
+    return 0;
 }
 
 int handleReconecting(int clientSocket, Player& player, Lobby& lobby, int connectedUser) {
@@ -218,40 +240,62 @@ int handleRematch(int clientSocket, int lobbyId) {
         return -1;
     }
 
-    std::lock_guard<std::mutex> lock(lobbies_mutex);
-    Lobby &lobby = lobbies[lobbyId];
-    lobby.setRematch(clientSocket);
+    Lobby *lobby = nullptr;
+    int playerSocket1, playerSocket2;
+    std::string name1, name2;
+    bool wantsRematch = false;
 
-    if (lobby.p1WantsRematch && lobby.p2WantsRematch) {
-        // START GAME
-        lobby.restartGame();
-        
-        std::string name1 = lobby.getPlayer1Username();
-        std::string name2 = lobby.getPlayer2Username();
-        
-        sendStartingPlayerInfo(lobby.getPlayerSocket1(), name1, name2, 1, lobby);
-        sendStartingPlayerInfo(lobby.getPlayerSocket2(), name1, name2, 1, lobby);
-    } 
+    {
+        std::lock_guard<std::mutex> lock(lobbies_mutex);
+        lobby = &lobbies[lobbyId];
+        lobby->setRematch(clientSocket);
+
+        wantsRematch = lobby->p1WantsRematch && lobby->p2WantsRematch;
     
+        if (wantsRematch) {
+            lobby->restartGame();
+            
+            name1 = lobby->getPlayer1Username();
+            name2 = lobby->getPlayer2Username();
+    
+            playerSocket1 = lobby->getPlayerSocket1();
+            playerSocket2 = lobby->getPlayerSocket2();
+        } 
+    }
+
+    if(wantsRematch) {
+        sendStartingPlayerInfo(playerSocket1, name1, name2, 1, *lobby);
+        sendStartingPlayerInfo(playerSocket2, name1, name2, 1, *lobby);
+    }
+
     return 0;
 }
 
 
 void startGame(int lobbyIndex) {
-      std::lock_guard<std::mutex> lock(lobbies_mutex);
-      if(lobbyIndex < 0 || lobbyIndex >= LOBBY_COUNT) return;
+    if(lobbyIndex < 0 || lobbyIndex >= LOBBY_COUNT) return;
 
-      Lobby &lobby = lobbies[lobbyIndex];
-      lobby.setStatus(1); 
+    std::string p1Name, p2Name;
+    int p1Socket, p2Socket;
+    Lobby* lobbyPtr = nullptr;
 
-      std::string p1Name = lobby.getPlayer1Username();
-      std::string p2Name = lobby.getPlayer2Username();
-      int p1Socket = lobby.getPlayerSocket1();
-      int p2Socket = lobby.getPlayerSocket2();
+    {
+        std::lock_guard<std::mutex> lock(lobbies_mutex);
 
-      std::cout << "[LOBBY " << (lobbyIndex+1) << "] Game started between " 
-                  << p1Name << " and " << p2Name << std::endl;
+        lobbyPtr = &lobbies[lobbyIndex];
+        lobbyPtr->setStatus(1); 
 
-      sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1, lobby); 
-      sendStartingPlayerInfo(p2Socket, p1Name, p2Name, 1, lobby);
+        p1Name = lobbyPtr->getPlayer1Username();
+        p2Name = lobbyPtr->getPlayer2Username();
+        p1Socket = lobbyPtr->getPlayerSocket1();
+        p2Socket = lobbyPtr->getPlayerSocket2();
+
+        std::cout << "[LOBBY " << (lobbyIndex+1) << "] Game started between " 
+                << p1Name << " and " << p2Name << std::endl;
+    }
+
+    if (lobbyPtr != nullptr) {
+        sendStartingPlayerInfo(p1Socket, p1Name, p2Name, 1, *lobbyPtr); 
+        sendStartingPlayerInfo(p2Socket, p1Name, p2Name, 1, *lobbyPtr);
+    }
 }
