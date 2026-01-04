@@ -20,7 +20,7 @@ class LobbyView(arcade.View):
     def __init__(self):
         super().__init__()
         self.manager = arcade.gui.UIManager()
-        
+
         self.username = ""
         self.client_socket = None
         self.server_queue = None
@@ -30,7 +30,7 @@ class LobbyView(arcade.View):
 
     def setup_lobby(self):
         self.manager.clear()
-        
+
         # Increased space_between to account for taller inputs
         self.v_box = arcade.gui.UIBoxLayout(space_between=15)
 
@@ -134,6 +134,9 @@ class LobbyView(arcade.View):
         print("[Main Thread] Successfully connected.")
         self.client_socket = client_socket
         self.server_queue = queue.Queue()
+        
+        self.ip_adress = target_ip
+        self.port = target_port
 
         import time
         time.sleep(0.05)
@@ -194,7 +197,7 @@ class LobbyView(arcade.View):
                         lobby_id = int(params[5])
 
                         from game_view import GameView
-                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id)
+                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id, self.ip_adress, self.port, self.username)
                         self.window.show_view(game_view)
                         return
                     elif params[1] == "SERVER_DISCONNECT":

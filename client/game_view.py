@@ -1,5 +1,9 @@
 import arcade
 import arcade.gui
+import time
+import queue
+import threading
+from server_handler import connect_to_server, start_receive_thread, start_heartbeat_thread
 from board import Board
 from stone import Stone
 
@@ -19,7 +23,7 @@ class GameView(arcade.View):
     Main application class.
     """
 
-    def __init__(self, client_socket, server_queue, current_player: int, username_one: str = "Player 1", username_two: str = "Player 2", lobby_id: int = -1, init_state: str = ""):
+    def __init__(self, client_socket, server_queue, current_player: int, username_one: str = "Player 1", username_two: str = "Player 2", lobby_id: int = -1, init_state: str = "", server_ip: str = "", server_port: int = 0, my_username: str = ""):
         """
         Initializer
         """
@@ -39,6 +43,12 @@ class GameView(arcade.View):
 
         self.client_socket = client_socket
         self.server_queue = server_queue
+        
+        # Networking info
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.my_username = my_username
+        self.is_reconnecting = False
 
         # Labels
         self.player1_score_label = None
@@ -49,6 +59,7 @@ class GameView(arcade.View):
         self.pause_box = None
         self.end_box = None
         self.rematch_box = None
+        self.reconnect_box = None
 
         # Set up the player info
         self.board = Board()
@@ -123,24 +134,72 @@ class GameView(arcade.View):
     def show_server_error_popup(self):
         """
         Shows an Error modal popup using UIMessageBox 
-        """
-        self.manager.focused_element = None 
-        
-        message_box = arcade.gui.UIMessageBox(
+        """        
+        self.reconnect_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
-            message_text="Disconnected from server.",
-            buttons=["OK"]
+            message_text="Disconnected! \nReconnecting... (Please Wait)",
+            buttons=["Leave Game"]
         )
         
-        @message_box.event("on_action")
+        @self.reconnect_box.event("on_action")
         def on_message_box_close(event):
+            self.is_reconnecting = False
             self.server_queue = None
             from lobby_view import LobbyView
             self.window.show_view(LobbyView())
             pass
         
-        self.manager.add(message_box)
+        self.manager.add(self.reconnect_box)
+        
+        thread = threading.Thread(target=self._reconnect_loop, daemon=True)
+        thread.start()
+        
+    def _reconnect_loop(self):
+        """ Attempt to reconnect in the background """
+        attempts: int = 0
+        
+        while self.is_reconnecting:
+            if self.client_socket is None:
+                attempts += 1
+                print("[GameView] Attempting to reconnect to server...")
+                new_socket = connect_to_server(self.server_ip, self.server_port)
+                if new_socket is not None:
+                    try:
+                        msg = f"REV CREATE {self.my_username}\n"
+                        new_socket.sendall(msg.encode('utf-8'))
+                        
+                        self.client_socket = new_socket
+                        self.server_queue = queue.Queue()
+                        
+                        recv_thread = threading.Thread(
+                            target=start_receive_thread, 
+                            args=(self.client_socket, self.server_queue), 
+                            daemon=True
+                        )
+                        recv_thread.start()
+                        
+                        hb_thread = threading.Thread(
+                            target=start_heartbeat_thread,
+                            args=(self.client_socket, self.server_queue),
+                            daemon=True
+                        )
+                        hb_thread.start()
+
+                        self.is_reconnecting = False                  
+                        if self.reconnect_box:
+                            self.manager.remove(self.reconnect_box)
+                            self.reconnect_box = None
+                            
+                        print("[Reconnect] Success! Resuming game.")
+                        return
+                    except Exception as e:
+                        print(f"[Reconnect] Login failed: {e}")
+                        if new_socket: new_socket.close()
+
+            for _ in range(5):
+                if not self.is_reconnecting: return
+                time.sleep(1)
     
     def show_pause_modal(self, player_name: str):
         """
