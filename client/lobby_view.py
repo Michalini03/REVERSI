@@ -187,7 +187,7 @@ class LobbyView(arcade.View):
                     params = message.split()
                     if len(params) > 1 and params[1] == "LOBBY":
                         lobby_count = int(params[2])
-                        self.window.show_view(LobbyListView(lobby_count, self.client_socket, self.server_queue))
+                        self.window.show_view(LobbyListView(lobby_count, self.client_socket, self.server_queue, self.ip_adress, self.port, self.username))
                     elif params[1] == "START":
                         print("[LobbyList] Reconnecting the game...")
 
@@ -197,7 +197,17 @@ class LobbyView(arcade.View):
                         lobby_id = int(params[5])
 
                         from game_view import GameView
-                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id, self.ip_adress, self.port, self.username)
+                        game_view = GameView(
+                            self.client_socket, 
+                            self.server_queue, 
+                            who_starts, 
+                            player_name, 
+                            opponent_name, 
+                            lobby_id, 
+                            self.ip_adress, 
+                            self.port, 
+                            self.username
+                        )
                         self.window.show_view(game_view)
                         return
                     elif params[1] == "SERVER_DISCONNECT":

@@ -12,7 +12,7 @@ class LobbyListView(arcade.View):
     Handles the UI for showing the list of lobbies.
     """
 
-    def __init__(self, lobby_count, client_socket, server_queue):
+    def __init__(self, lobby_count, client_socket, server_queue, ip_adress, port, username):
         """ Initializer """
         super().__init__()
 
@@ -27,6 +27,10 @@ class LobbyListView(arcade.View):
         self.lobby_buttons = []
 
         self.lobby_id = -1
+
+        self.username = username
+        self.ip_adress = ip_adress
+        self.port = port
 
         self.background_color = arcade.color.AMAZON
 
@@ -124,7 +128,18 @@ class LobbyListView(arcade.View):
                         opponent_name = params[4]
                         lobby_id = params[5]
 
-                        game_view = GameView(self.client_socket, self.server_queue, who_starts, player_name, opponent_name, lobby_id)
+                        game_view = GameView(
+                            self.client_socket, 
+                            self.server_queue, 
+                            who_starts, 
+                            player_name, 
+                            opponent_name, 
+                            lobby_id, 
+                            self.ip_adress, 
+                            self.port, 
+                            self.username
+                        )
+
                         self.window.show_view(game_view)
                         return
                     if command == "SERVER_DISCONNECT":

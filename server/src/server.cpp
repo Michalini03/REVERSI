@@ -95,7 +95,7 @@ void handleClientLogic(int clientSocket) {
         memset(tempBuffer, 0, 1024);
         int valread = read(clientSocket, tempBuffer, 1024);
         
-        if (valread <= 0 || (new_player != nullptr && new_player->tolerance > 3)) {
+        if (new_player != nullptr && new_player->tolerance > 3) {
             std::cout << "Client " << clientSocket << " disconnected." << std::endl;
             bool memoryRetained = false;
             int disconnected_user = -1;
@@ -135,12 +135,19 @@ void handleClientLogic(int clientSocket) {
             new_player = new Player(clientSocket);
         }
 
-        dataBuffer.append(tempBuffer, valread);
-        size_t pos = 0;
-        while ((pos = dataBuffer.find('\n')) != std::string::npos) {
-            std::string message = dataBuffer.substr(0, pos);
-            dataBuffer.erase(0, pos + 1);
-            handleMessage(clientSocket, message.c_str(), *new_player);
+        if (valread > 0) {
+            dataBuffer.append(tempBuffer, valread);
+            size_t pos = 0;
+            while ((pos = dataBuffer.find('\n')) != std::string::npos) {
+                std::string message = dataBuffer.substr(0, pos);
+                dataBuffer.erase(0, pos + 1);
+                handleMessage(clientSocket, message.c_str(), *new_player);
+            }
+        }
+        else {
+            if (new_player != nullptr) {
+                new_player->tolerance++;
+            }
         }
     }
 

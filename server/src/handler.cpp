@@ -58,6 +58,8 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
             // REV JOIN <LobbyID> (Size 3)
             if (args.size() != 3) throw std::runtime_error("Invalid JOIN args");
 
+            if (player.username.empty()) throw std::runtime_error("User is not logged in yet");
+
             int lobbyId = std::stoi(args[2]); 
 
             std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
@@ -104,6 +106,7 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
             handleRematch(clientSocket, lobbyId);
         }
         else if (command == "HEARTBEAT") {
+            player.tolerance = 0;
             return;
         }
         else {
@@ -165,6 +168,11 @@ int handleLobbyExit(int clientSocket, int lobbyId) {
         }
     
         lobby->removePlayer(clientSocket);
+    }
+
+    if (leaverId == 0) {
+        std::cout << "[LOBBY] Player is not connect to a lobby." << std::endl;
+        return 0;
     }
 
     if (opponentSocket != -1) {

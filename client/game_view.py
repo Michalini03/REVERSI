@@ -23,7 +23,7 @@ class GameView(arcade.View):
     Main application class.
     """
 
-    def __init__(self, client_socket, server_queue, current_player: int, username_one: str = "Player 1", username_two: str = "Player 2", lobby_id: int = -1, init_state: str = "", server_ip: str = "", server_port: int = 0, my_username: str = ""):
+    def __init__(self, client_socket, server_queue, current_player: int, username_one: str = "Player 1", username_two: str = "Player 2", lobby_id: int = -1, server_ip: str = "", server_port: int = 0, my_username: str = ""):
         """
         Initializer
         """
@@ -63,7 +63,6 @@ class GameView(arcade.View):
 
         # Set up the player info
         self.board = Board()
-        self.init_state = init_state
 
         # Set the background color
         self.background_color = arcade.color.AMAZON
@@ -134,13 +133,17 @@ class GameView(arcade.View):
     def show_server_error_popup(self):
         """
         Shows an Error modal popup using UIMessageBox 
-        """        
+        """
+        if self.reconnect_box:
+            return
         self.reconnect_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
             message_text="Disconnected! \nReconnecting... (Please Wait)",
             buttons=["Leave Game"]
         )
+
+        self.is_reconnecting = True
         
         @self.reconnect_box.event("on_action")
         def on_message_box_close(event):
@@ -158,44 +161,40 @@ class GameView(arcade.View):
     def _reconnect_loop(self):
         """ Attempt to reconnect in the background """
         attempts: int = 0
-        
-        while self.is_reconnecting:
-            if self.client_socket is None:
-                attempts += 1
-                print("[GameView] Attempting to reconnect to server...")
-                new_socket = connect_to_server(self.server_ip, self.server_port)
-                if new_socket is not None:
-                    try:
-                        msg = f"REV CREATE {self.my_username}\n"
-                        new_socket.sendall(msg.encode('utf-8'))
-                        
-                        self.client_socket = new_socket
-                        self.server_queue = queue.Queue()
-                        
-                        recv_thread = threading.Thread(
-                            target=start_receive_thread, 
-                            args=(self.client_socket, self.server_queue), 
-                            daemon=True
-                        )
-                        recv_thread.start()
-                        
-                        hb_thread = threading.Thread(
-                            target=start_heartbeat_thread,
-                            args=(self.client_socket, self.server_queue),
-                            daemon=True
-                        )
-                        hb_thread.start()
+        print(self.is_reconnecting)
+        print(self.client_socket) 
 
-                        self.is_reconnecting = False                  
-                        if self.reconnect_box:
-                            self.manager.remove(self.reconnect_box)
-                            self.reconnect_box = None
-                            
-                        print("[Reconnect] Success! Resuming game.")
-                        return
-                    except Exception as e:
-                        print(f"[Reconnect] Login failed: {e}")
-                        if new_socket: new_socket.close()
+        while self.is_reconnecting:
+            attempts += 1
+            print("[GameView] Attempting to reconnect to server...")
+            new_socket = connect_to_server(self.server_ip, self.server_port)
+            if new_socket is not None:
+                try:
+                    msg = f"REV CREATE {self.my_username}\n"
+                    new_socket.sendall(msg.encode('utf-8'))
+                    
+                    self.client_socket = new_socket
+                    self.server_queue = queue.Queue()
+                    
+                    recv_thread = threading.Thread(
+                        target=start_receive_thread, 
+                        args=(self.client_socket, self.server_queue), 
+                        daemon=True
+                    )
+                    recv_thread.start()
+                    
+                    hb_thread = threading.Thread(
+                        target=start_heartbeat_thread,
+                        args=(self.client_socket, self.server_queue),
+                        daemon=True
+                    )
+                    hb_thread.start()
+                    
+                    self.is_reconnecting = False
+                    return
+                except Exception as e:
+                    print(f"[Reconnect] Login failed: {e}")
+                    if new_socket: new_socket.close()
 
             for _ in range(5):
                 if not self.is_reconnecting: return
@@ -218,7 +217,7 @@ class GameView(arcade.View):
         def on_message_box_close(event):
             from lobby_list_view import LobbyListView
             # Refresh lobby list logic
-            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue, self.server_ip, self.server_port, self.my_username))
             
             # Send Exit command
             try:
@@ -249,7 +248,7 @@ class GameView(arcade.View):
                 print(f"[GameView] Failed to send exit command: {e}")
 
             from lobby_list_view import LobbyListView
-            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue, self.server_ip, self.server_port, self.my_username))
         
         self.manager.add(message_box)
 
@@ -282,7 +281,7 @@ class GameView(arcade.View):
                 except:
                     pass
                 from lobby_list_view import LobbyListView
-                self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+                self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue, self.server_ip, self.server_port, self.my_username))
             
             elif action == "Rematch":
                 print("[GameView] Rematch requested.")
@@ -316,7 +315,7 @@ class GameView(arcade.View):
                 print(f"[GameView] Failed to send exit command: {e}")
 
             from lobby_list_view import LobbyListView
-            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue))
+            self.window.show_view(LobbyListView(5, self.client_socket, self.server_queue, self.server_ip, self.server_port, self.my_username))
         
         self.manager.add(self.rematch_box)
 
@@ -340,7 +339,6 @@ class GameView(arcade.View):
                 command = params[1]
 
                 if command == "START":
-                    # HANDLE REMATCH START
                     # Close any open Game Over / Pause boxes
                     if getattr(self, "rematch_box", None):
                         self.manager.remove(self.rematch_box)
@@ -351,16 +349,19 @@ class GameView(arcade.View):
                     if getattr(self, "pause_box", None):
                         self.manager.remove(self.pause_box)
                         self.pause_box = None
+                    if getattr(self, "reconnect_box", None):
+                        self.manager.remove(self.reconnect_box)
+                        self.reconnect_box = None
                 
                     # Soft Reset the Client State
                     self.board = Board()
                     self.active_player = 1
                     
                     if self.status_label:
-                        self.status_label.text = "Rematch Started!"
+                        self.status_label.text = "Game resumed!"
                         self.status_label.style = {"text_color": arcade.color.BRIGHT_GREEN}
                         
-                    print("[GameView] Rematch started!")
+                    print("[GameView] Game resumed!")
 
                 elif command == "STATE":
                     # Params: PREFIX STATE <BOARD> <SCORE1> <SCORE2>
@@ -374,7 +375,7 @@ class GameView(arcade.View):
                     # Update Active Player for the Green Dot
                     self.active_player = int(params[5])
                     # Clear warning text if it was showing a pass
-                    if self.status_label and "No moves" in self.status_label.text:
+                    if self.status_label:
                         self.status_label.text = "Game in progress..."
                         self.status_label.style = {"text_color": arcade.color.YELLOW}
                 elif command == "SERVER_DISCONNECT":
