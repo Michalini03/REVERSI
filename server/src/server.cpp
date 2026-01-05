@@ -10,7 +10,6 @@
 #include <unistd.h>
 #include <thread>
 #include <algorithm>
-#include <errno.h>
 #include <mutex>
 #include <vector>
 
@@ -98,8 +97,8 @@ void handleClientLogic(int clientSocket) {
         memset(tempBuffer, 0, 1024);
         int valread = read(clientSocket, tempBuffer, 1024);
 
-        if (valread == 0 || new_player != nullptr && new_player->tolerance > 3) {
-            std::cout << "Client " << clientSocket << " disconnected due to missed heartbeats." << std::endl;
+        if (valread <= 0 || new_player != nullptr && new_player->tolerance > 3) {
+            std::cout << "[SERVER] Client " << clientSocket << " disconnected" << std::endl;
 
             bool memoryRetained = false;
             int disconnected_user = -1;
@@ -139,24 +138,12 @@ void handleClientLogic(int clientSocket) {
             new_player = new Player(clientSocket);
         }
 
-        if (valread > 0) {
-            dataBuffer.append(tempBuffer, valread);
-            size_t pos = 0;
-            while ((pos = dataBuffer.find('\n')) != std::string::npos) {
-                std::string message = dataBuffer.substr(0, pos);
-                dataBuffer.erase(0, pos + 1);
-                handleMessage(clientSocket, message.c_str(), *new_player);
-            }
-        }
-        else if (valread < 0) {
-            if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                if (new_player != nullptr) {
-                    new_player->tolerance++;
-                }
-            } else {
-                perror("read error");
-                break;
-            }
+        dataBuffer.append(tempBuffer, valread);
+        size_t pos = 0;
+        while ((pos = dataBuffer.find('\n')) != std::string::npos) {
+            std::string message = dataBuffer.substr(0, pos);
+            dataBuffer.erase(0, pos + 1);
+            handleMessage(clientSocket, message.c_str(), *new_player);
         }
     }
 

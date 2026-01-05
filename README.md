@@ -17,4 +17,6 @@ Semestral work for class 'Introduction to computer network'
 
 
 ### TODO:
-- Heartbeat
+- SECURITY disconnect from client side
+- When create server does not send anything (is empty) handle it as well
+- Secure STATE routing on server
