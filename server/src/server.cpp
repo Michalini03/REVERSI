@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <thread>
 #include <algorithm>
+#include <errno.h>
+#include <mutex>
+#include <vector>
 
 // Define Globals Here
 std::vector<Lobby> lobbies; 
@@ -94,9 +97,10 @@ void handleClientLogic(int clientSocket) {
     while(true) {
         memset(tempBuffer, 0, 1024);
         int valread = read(clientSocket, tempBuffer, 1024);
-        
-        if (new_player != nullptr && new_player->tolerance > 3) {
-            std::cout << "Client " << clientSocket << " disconnected." << std::endl;
+
+        if (valread == 0 || new_player != nullptr && new_player->tolerance > 3) {
+            std::cout << "Client " << clientSocket << " disconnected due to missed heartbeats." << std::endl;
+
             bool memoryRetained = false;
             int disconnected_user = -1;
             int connected_oponent_socket = -1;
@@ -144,15 +148,21 @@ void handleClientLogic(int clientSocket) {
                 handleMessage(clientSocket, message.c_str(), *new_player);
             }
         }
-        else {
-            if (new_player != nullptr) {
-                new_player->tolerance++;
+        else if (valread < 0) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                if (new_player != nullptr) {
+                    new_player->tolerance++;
+                }
+            } else {
+                perror("read error");
+                break;
             }
         }
     }
 
+    // Close socket & clean up
     close(clientSocket);
-    
+
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
         auto it = std::find(clientSockets.begin(), clientSockets.end(), clientSocket);

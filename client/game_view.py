@@ -48,7 +48,12 @@ class GameView(arcade.View):
         self.server_ip = server_ip
         self.server_port = server_port
         self.my_username = my_username
+        
+        # Reconnect info
         self.is_reconnecting = False
+        self.reconnect_start_time = None
+        self.reconnect_elapsed = 0
+
 
         # Labels
         self.player1_score_label = None
@@ -136,10 +141,14 @@ class GameView(arcade.View):
         """
         if self.reconnect_box:
             return
+
+        self.reconnect_start_time = time.time()
+        self.reconnect_elapsed = 0
+
         self.reconnect_box = arcade.gui.UIMessageBox(
             width=350,
             height=200,
-            message_text="Disconnected! \nReconnecting... (Please Wait)",
+            message_text="Disconnected! \nReconnecting... (0s)",
             buttons=["Leave Game"]
         )
 
@@ -148,6 +157,8 @@ class GameView(arcade.View):
         @self.reconnect_box.event("on_action")
         def on_message_box_close(event):
             self.is_reconnecting = False
+            self.reconnect_start_time = None
+            self.reconnect_elapsed = 0
             self.server_queue = None
             from lobby_view import LobbyView
             self.window.show_view(LobbyView())
@@ -161,8 +172,6 @@ class GameView(arcade.View):
     def _reconnect_loop(self):
         """ Attempt to reconnect in the background """
         attempts: int = 0
-        print(self.is_reconnecting)
-        print(self.client_socket) 
 
         while self.is_reconnecting:
             attempts += 1
@@ -191,6 +200,8 @@ class GameView(arcade.View):
                     hb_thread.start()
                     
                     self.is_reconnecting = False
+                    self.reconnect_start_time = None
+                    self.reconnect_elapsed = 0
                     return
                 except Exception as e:
                     print(f"[Reconnect] Login failed: {e}")
@@ -325,6 +336,14 @@ class GameView(arcade.View):
 
         if self.client_socket is None or self.server_queue is None:
             return
+
+        if self.is_reconnecting and self.reconnect_box:
+            self.reconnect_elapsed = int(time.time() - self.reconnect_start_time)
+            self.reconnect_box.message_text = (
+                "Disconnected!\n"
+                f"Reconnecting... ({self.reconnect_elapsed}s)"
+            )
+
 
         while not self.server_queue.empty():
             message = self.server_queue.get()
