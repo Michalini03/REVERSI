@@ -51,8 +51,7 @@ class GameView(arcade.View):
         
         # Reconnect info
         self.is_reconnecting = False
-        self.reconnect_start_time = None
-        self.reconnect_elapsed = 0
+        self.attempts = 0
 
 
         # Labels
@@ -142,15 +141,31 @@ class GameView(arcade.View):
         if self.reconnect_box:
             return
 
-        self.reconnect_start_time = time.time()
-        self.reconnect_elapsed = 0
+        self.attempts = 0
 
-        self.reconnect_box = arcade.gui.UIMessageBox(
-            width=350,
-            height=200,
-            message_text="Disconnected! \nReconnecting... (0s)",
-            buttons=["Leave Game"]
-        )
+        self.create_reconnect_box()
+        thread = threading.Thread(target=self._reconnect_loop, daemon=True)
+        thread.start()
+
+    def create_reconnect_box(self):
+        if getattr(self, "reconnect_box", None):
+            self.manager.remove(self.reconnect_box)
+            self.reconnect_box = None
+
+        if self.attempts <= 3 :
+            self.reconnect_box = arcade.gui.UIMessageBox(
+                width=350,
+                height=200,
+                message_text=f"Disconnected! \nReconnecting... ({self.attempts} / 3 attempts)",
+                buttons=["Leave Game"]
+            )
+        else:
+            self.reconnect_box = arcade.gui.UIMessageBox(
+                width=350,
+                height=200,
+                message_text=f"Disconnected! \nReconnection failed",
+                buttons=["Leave Game"]
+            )
 
         self.is_reconnecting = True
         
@@ -165,16 +180,13 @@ class GameView(arcade.View):
             pass
         
         self.manager.add(self.reconnect_box)
-        
-        thread = threading.Thread(target=self._reconnect_loop, daemon=True)
-        thread.start()
-        
+
     def _reconnect_loop(self):
         """ Attempt to reconnect in the background """
-        attempts: int = 0
+        self.attempts: int = 0
 
-        while self.is_reconnecting:
-            attempts += 1
+        while self.is_reconnecting and self.attempts <= 3:
+            self.attempts += 1
             print("[GameView] Attempting to reconnect to server...")
             new_socket = connect_to_server(self.server_ip, self.server_port)
             if new_socket is not None:
@@ -200,16 +212,16 @@ class GameView(arcade.View):
                     hb_thread.start()
                     
                     self.is_reconnecting = False
-                    self.reconnect_start_time = None
-                    self.reconnect_elapsed = 0
                     return
                 except Exception as e:
-                    print(f"[Reconnect] Login failed: {e}")
+                    print(f"[Reconnect] Failed: {e}")
                     if new_socket: new_socket.close()
 
             for _ in range(5):
                 if not self.is_reconnecting: return
                 time.sleep(1)
+        
+        self.is_reconnecting = False
     
     def show_pause_modal(self, player_name: str):
         """
@@ -337,12 +349,8 @@ class GameView(arcade.View):
         if self.client_socket is None or self.server_queue is None:
             return
 
-        if self.is_reconnecting and self.reconnect_box:
-            self.reconnect_elapsed = int(time.time() - self.reconnect_start_time)
-            self.reconnect_box.message_text = (
-                "Disconnected!\n"
-                f"Reconnecting... ({self.reconnect_elapsed}s)"
-            )
+        if self.is_reconnecting:
+            self.create_reconnect_box()
 
 
         while not self.server_queue.empty():
