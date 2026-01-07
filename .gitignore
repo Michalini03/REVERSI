@@ -2,3 +2,4 @@
 .venv/
 client/__pycache__/
 myenv/
+server/server
