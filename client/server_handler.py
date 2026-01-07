@@ -7,13 +7,33 @@ HEARTBEAT_INTERVAL = 2.0  # Send heartbeat every 2 seconds
 TIMEOUT_LIMIT = 6.0       # Disconnect if no response for 6 seconds
 
 
+class GameSocket:
+    """
+    A wrapper around the standard socket to allow adding custom attributes
+    like 'last_response' for the heartbeat logic.
+    """
+    def __init__(self, real_socket):
+        self.sock = real_socket
+        self.last_response = time.time()
+
+    def recv(self, bufsize):
+        return self.sock.recv(bufsize)
+
+    def sendall(self, data):
+        return self.sock.sendall(data)
+
+    def close(self):
+        return self.sock.close()
+
+
 def connect_to_server(server_address=SERVER_ADRESS, port=PORT):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_address, port))
-        sock.last_response = time.time()
 
-        return sock
+        # Wrap the socket in our custom class so we can store the timestamp
+        return GameSocket(sock)
+
     except socket.error as e:
         print(f"Connection error: {e}")
         return None
@@ -36,6 +56,7 @@ def start_receive_thread(client_socket, server_queue):
                 break
 
             client_socket.last_response = time.time()
+
             buffer += data.decode('utf-8')
 
             while "\n" in buffer:
@@ -47,14 +68,10 @@ def start_receive_thread(client_socket, server_queue):
                         bad_message_count += 1
                         if bad_message_count >= MAX_BAD_MESSAGES:
                             raise ConnectionAbortedError("Too many invalid messages.")
-
                     else:
                         bad_message_count = 0
 
-                        # 💓 HEARTBEAT LOGIC
-                        # If it's just a Ping-Pong, don't spam the UI queue
                         if "HEARTPOP" in message:
-                            # We already updated timestamp above, so just ignore this line
                             continue
 
                         server_queue.put(message)

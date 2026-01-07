@@ -60,6 +60,14 @@ int Lobby::getStatus() const {
       return this->status;
 }
 
+Player* Lobby::getPlayer1() {
+      return this->player1;
+}
+
+Player* Lobby::getPlayer2() {
+      return this->player2;
+}
+
 int Lobby::getPlayerSocket1() {
       if (this->player1 == nullptr) {
             return -1;

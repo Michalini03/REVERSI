@@ -1,15 +1,23 @@
 #pragma once
 #include <string>
 
-struct Player {
+enum ClientState {
+    STATE_LOGIN,     // Connected, but no username yet
+    STATE_MENU,      // Logged in, browsing lobbies
+    STATE_WAITING,   // Inside a lobby, alone
+    STATE_PLAYING,   // Inside a lobby, game is active
+    STATE_GAME_OVER  // Game finished
+};
+
+class Player {
+public:
     int socket;
-    int tolerance;
     std::string username;
+    int tolerance; 
+    
+    ClientState state; 
 
-    // Constructor for easy creation
-    Player(int s) : socket(s), tolerance(0) {}
+    Player(int s) : socket(s), tolerance(0), state(STATE_MENU) {}
 
-    void appendName(const std::string& name) {
-        username = name;
-    }
+    void appendName(std::string name) { username = name; }
 };

@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <thread>
 #include <algorithm>
@@ -25,7 +26,7 @@ void startServer(std::string ip, int port) {
     int opt = 1;
     int addrlen = sizeof(address);
 
-    const int finalPort;
+    int finalPort;
 
     if (port > 0) {
         finalPort = port;
@@ -54,8 +55,7 @@ void startServer(std::string ip, int port) {
     } else {
         address.sin_addr.s_addr = INADDR_ANY;
     }
-    address.sin_port = htons(PORT);
-
+    address.sin_port = htons(finalPort);
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         close(server_fd);
@@ -148,6 +148,7 @@ void handleClientLogic(int clientSocket) {
 
         if (new_player == nullptr) {
             new_player = new Player(clientSocket);
+            new_player->state = STATE_LOGIN;
         }
 
         dataBuffer.append(tempBuffer, valread);

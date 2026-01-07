@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 /**
  * @brief Initializes and runs the main server loop.

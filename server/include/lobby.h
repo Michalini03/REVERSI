@@ -19,6 +19,10 @@ public:
       int getStatus() const;
       void setStatus(int newStatus);
       int setPlayer(Player* player);
+
+      Player* getPlayer1();
+      Player* getPlayer2();
+
       int getPlayerSocket1();
       int getPlayerSocket2();
       std::string getPlayer1Username();

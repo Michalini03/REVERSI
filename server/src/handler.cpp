@@ -24,99 +24,151 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
         std::cout << "[SECURITY] Invalid prefix from client " << clientSocket << std::endl;
         return;
     }
-
-    if (args.size() < 2) {
-        std::cout << "[SECURITY] Empty command from client " << clientSocket << std::endl;
-        return;
-    }
+    if (args.size() < 2) return;
 
     std::string command = args[1];
     player.tolerance = 0;
 
     try {
-        if (command == "CREATE") {
-            // REV CREATE <Username> (Size 3)
-            if (args.size() != 3) throw std::runtime_error("Invalid CREATE args");
-            
-            std::string username = args[2];
-
-            player.appendName(username);
-            std::cout << "Processing CREATE command." << std::endl;
-
-            {
-                std::lock_guard<std::mutex> lock(lobbies_mutex);
-                for (auto &lobby : lobbies) {
-                    int connectedUser = lobby.reconnectUser(player);
-                    if (connectedUser != -1) {
-                        handleReconecting(clientSocket, player, lobby, connectedUser);
-                        return;
-                    }
-                }
-            }
-            if(sendLobbyList(clientSocket) != 0) throw std::runtime_error("Error when sending Lobby List");
-        }
-        else if (command == "JOIN") {
-            // REV JOIN <LobbyID> (Size 3)
-            if (args.size() != 3) throw std::runtime_error("Invalid JOIN args");
-
-            if (player.username.empty()) throw std::runtime_error("User is not logged in yet");
-
-            int lobbyId = std::stoi(args[2]); 
-
-            std::cout << "Processing JOIN command for lobby " << lobbyId << std::endl;
-            int result = handleLobbyJoin(clientSocket, lobbyId, player);
-            
-            if(result == 1) {
-                std::cout << "[SERVER] Client joined as Player 1 in lobby " << lobbyId << std::endl;
-            } else if(result == 2) { 
-                std::cout << "[SERVER] Client joined as Player 2 in lobby " << lobbyId << std::endl;
-                startGame(lobbyId);
-            } else if(result == 3) {
-                 std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
-            } else {
-                throw std::runtime_error("Error when joining players to lobby");
-            }
-        }
-        else if (command == "EXIT") {
-            // REV EXIT <LobbyID> (Size 3)
-            if (args.size() != 3) throw std::runtime_error("Invalid EXIT args");
-
-            int lobbyId = std::stoi(args[2]);
-            std::cout << "Processing EXIT command for lobby " << lobbyId << std::endl;
-
-            handleLobbyExit(clientSocket, lobbyId);
-        }
-        else if (command == "MOVE") {
-            // REV MOVE <X> <Y> <LobbyID> (Size 5)
-            if (args.size() != 5) throw std::runtime_error("Invalid MOVE args");
-
-            int x = std::stoi(args[2]);
-            int y = std::stoi(args[3]);
-            int lobbyId = std::stoi(args[4]);
-
-            std::cout << "Processing MOVE command to (" << x << ", " << y << ")" << std::endl;
-
-
-            if(handleMoving(x, y, clientSocket, lobbyId) != 0) throw std::runtime_error("Error occured while applying move");
-        }
-        else if (command == "REMATCH") {
-            // REV REMATCH <LobbyID> (Size 3)
-            if (args.size() != 3) throw std::runtime_error("Invalid REMATCH args");
-
-            int lobbyId = std::stoi(args[2]);
-            handleRematch(clientSocket, lobbyId);
-        }
-        else if (command == "HEARTBEAT") {
+        // --- GLOBAL COMMANDS ---
+        if (command == "HEARTBEAT") {
             std::string response = "REV HEARTPOP\n";
             send(clientSocket, response.c_str(), response.size(), 0);
+            return;
         }
-        else {
-            std::cout << "[SECURITY] Unknown command: " << command << std::endl;
+
+        // --- STATE MACHINE ---
+        switch (player.state) {
+
+            case STATE_LOGIN:
+                if (command == "CREATE") {
+                    if (args.size() != 3) throw std::runtime_error("Invalid CREATE args");
+                    
+                    std::string username = args[2];
+                    player.appendName(username);
+                    std::cout << "[LOGIN] User " << username << " logged in." << std::endl;
+
+                    // Check Reconnection
+                    bool reconnected = false;
+                    {
+                        std::lock_guard<std::mutex> lock(lobbies_mutex);
+                        for (auto &lobby : lobbies) {
+                            int connectedUser = lobby.reconnectUser(player);
+                            if (connectedUser != -1) {
+                                handleReconecting(clientSocket, player, lobby, connectedUser);
+                                player.state = STATE_PLAYING;
+                                reconnected = true;
+                                return;
+                            }
+                        }
+                    }
+
+                    if (!reconnected) {
+                        sendLobbyList(clientSocket);
+                        player.state = STATE_MENU;
+                    }
+                }
+                else {
+                    std::cerr << "[SECURITY] Blocked " << command << " in LOGIN state." << std::endl;
+                }
+                break;
+
+            case STATE_MENU:
+                if (command == "JOIN") {
+                    if (args.size() != 3) throw std::runtime_error("Invalid JOIN args");
+                    int lobbyId = std::stoi(args[2]); 
+                    
+                    int result = handleLobbyJoin(clientSocket, lobbyId, player);
+                    
+                    // result 1: Joined as P1 (Waiting)
+                    // result 2: Joined as P2 (Game Start)
+                    if (result == 1) {
+                        player.state = STATE_WAITING;
+                    } 
+                    else if (result == 2) {
+                        player.state = STATE_PLAYING;
+                        
+                        {
+                            std::lock_guard<std::mutex> lock(lobbies_mutex);
+                            Player* p1 = lobbies[lobbyId].getPlayer1();
+                            if (p1) p1->state = STATE_PLAYING;
+                        }
+
+                        startGame(lobbyId);
+                    } else if(result == 3) {
+                        std::cout << "[SERVER] Lobby " << lobbyId << " is full." << std::endl;
+                    } else {
+                        throw std::runtime_error("Error when joining players to lobby");
+                    }
+                }
+                else if (command == "CREATE") {
+                     std::cerr << "[SECURITY] User already logged in." << std::endl;
+                }
+                else {
+                     std::cerr << "[SECURITY] Blocked " << command << " in MENU state." << std::endl;
+                }
+                break;
+
+            case STATE_WAITING:
+                if (command == "EXIT") {
+                    if (args.size() != 3) throw std::runtime_error("Invalid EXIT args");
+                    int lobbyId = std::stoi(args[2]);
+                    
+                    handleLobbyExit(clientSocket, lobbyId);
+                    player.state = STATE_MENU;
+                    sendLobbyList(clientSocket);
+                }
+                else {
+                    std::cerr << "[SECURITY] Blocked " << command << " in WAITING state." << std::endl;
+                }
+                break;
+
+            case STATE_PLAYING:
+                if (command == "MOVE") {
+                    if (args.size() != 5) throw std::runtime_error("Invalid MOVE args");
+                    int x = std::stoi(args[2]);
+                    int y = std::stoi(args[3]);
+                    int lobbyId = std::stoi(args[4]);
+                    
+                    handleMoving(x, y, clientSocket, lobbyId);
+                    
+                    std::lock_guard<std::mutex> lock(lobbies_mutex);
+                    if (lobbies[lobbyId].getStatus() == 0) {
+                        player.state = STATE_GAME_OVER;
+                        
+                        Player* opp = (lobbies[lobbyId].getPlayer1() == &player) 
+                                      ? lobbies[lobbyId].getPlayer2() 
+                                      : lobbies[lobbyId].getPlayer1();
+                        if (opp) opp->state = STATE_GAME_OVER;
+                    }
+                }
+                else if (command == "EXIT") {
+                    int lobbyId = std::stoi(args[2]);
+                    handleLobbyExit(clientSocket, lobbyId);
+                    player.state = STATE_MENU;
+                    sendLobbyList(clientSocket);
+                }
+                else {
+                    std::cerr << "[SECURITY] Blocked " << command << " in PLAYING state." << std::endl;
+                }
+                break;
+
+            case STATE_GAME_OVER:
+                if (command == "REMATCH") {
+                    int lobbyId = std::stoi(args[2]);
+                    handleRematch(clientSocket, lobbyId);
+                }
+                else if (command == "EXIT") {
+                    int lobbyId = std::stoi(args[2]);
+                    handleLobbyExit(clientSocket, lobbyId);
+                    player.state = STATE_MENU;
+                    sendLobbyList(clientSocket);
+                }
+                break;
         }
 
     } catch (const std::exception& e) {
-        // This catches wrong argument counts AND non-integer inputs (std::stoi errors)
-        std::cerr << "[SECURITY] Malformed command from client " << clientSocket << ": " << e.what() << std::endl;  
+        std::cerr << "[SECURITY] Error: " << e.what() << std::endl;
     }
 }
 

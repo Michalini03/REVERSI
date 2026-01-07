@@ -352,97 +352,107 @@ class GameView(arcade.View):
         if self.is_reconnecting:
             self.create_reconnect_box()
 
-
         while not self.server_queue.empty():
             message = self.server_queue.get()
 
-            if message is None or message.strip() == "":
-                continue
-            print(f"[GameView] Message from server: {message}")
-            # --- PROCESS SERVER MESSAGES HERE ---
+            try:
+                if message is None or message.strip() == "":
+                    continue
+                print(f"[GameView] Message from server: {message}")
+                # --- PROCESS SERVER MESSAGES HERE ---
 
-            params = message.split()
-            if params[0] == PREFIX:
-                command = params[1]
+                params = message.split()
+                if params[0] == PREFIX:
+                    command = params[1]
 
-                if command == "START":
-                    # Close any open Game Over / Pause boxes
-                    if getattr(self, "rematch_box", None):
-                        self.manager.remove(self.rematch_box)
-                        self.rematch_box = None
-                    if getattr(self, "end_box", None):
-                        self.manager.remove(self.end_box)
-                        self.end_box = None
-                    if getattr(self, "pause_box", None):
-                        self.manager.remove(self.pause_box)
-                        self.pause_box = None
-                    if getattr(self, "reconnect_box", None):
-                        self.manager.remove(self.reconnect_box)
-                        self.reconnect_box = None
-                
-                    # Soft Reset the Client State
-                    self.board = Board()
-                    self.active_player = 1
-                    
-                    if self.status_label:
-                        self.status_label.text = "Game resumed!"
-                        self.status_label.style = {"text_color": arcade.color.BRIGHT_GREEN}
-                        
-                    print("[GameView] Game resumed!")
-
-                elif command == "STATE":
-                    # Params: PREFIX STATE <BOARD> <SCORE1> <SCORE2>
-                    self.board.set_state(params[2])
-                    score1 = params[3]
-                    score2 = params[4]
-                    if self.player1_score_label:
-                        self.player1_score_label.text = str(score1)
-                    if self.player2_score_label:
-                        self.player2_score_label.text = str(score2)
-                    # Update Active Player for the Green Dot
-                    self.active_player = int(params[5])
-                    # Clear warning text if it was showing a pass
-                    if self.status_label:
-                        self.status_label.text = "Game in progress..."
-                        self.status_label.style = {"text_color": arcade.color.YELLOW}
-                elif command == "SERVER_DISCONNECT":
-                    print("[GameView] Disconnected from server.")
-                    self.show_server_error_popup()
-                elif command == "DISCONNECT":
-                    player_num = int(params[2])
-                    player_name: str = self.username_one if player_num == 1 else self.username_two
-                    # Check if we are currently looking at the Game Over / Rematch screen
-                    if getattr(self, "rematch_box", None) or getattr(self, "end_box", None):
-                        if self.rematch_box:
+                    if command == "START":
+                        # Close any open Game Over / Pause boxes
+                        if getattr(self, "rematch_box", None):
                             self.manager.remove(self.rematch_box)
                             self.rematch_box = None
-                        if self.end_box:
+                        if getattr(self, "end_box", None):
                             self.manager.remove(self.end_box)
                             self.end_box = None
-                        self.show_error_popup(f"{player_name} left.\nRematch cancelled.")
-                    else:
-                        print(f"[GameView] Player {player_name} disconnected from the game.")
-                        self.show_pause_modal(player_name)
-                elif command == "RECONNECT":
-                    if self.pause_box is not None:
-                        self.manager.remove(self.pause_box)
-                        self.pause_box = None
-                        print("[GameView] Opponent reconnected. ")
+                        if getattr(self, "pause_box", None):
+                            self.manager.remove(self.pause_box)
+                            self.pause_box = None
+                        if getattr(self, "reconnect_box", None):
+                            self.manager.remove(self.reconnect_box)
+                            self.reconnect_box = None
+
+                        # Soft Reset the Client State
+                        self.board = Board()
+                        self.active_player = 1
+
                         if self.status_label:
-                            self.status_label.text = "Opponent Reconnected!"
-                elif command == "PASS":
-                    if self.status_label:
-                        self.status_label.text = "No moves available!\nTurn passed to opponent."
-                        self.status_label.style = {"text_color": arcade.color.RED}
-                    # Manually switch active player locally for instant feedback
-                    self.active_player = 2 if self.active_player == 1 else 1
-                    print("[GameView] Turn passed.")
-                elif command == "END":
-                    winner_id = int(params[2])
-                    self.active_player = 1
-                    self.show_game_over_popup(winner_id)
-                else:
-                    print("[GameView] Unexpected command from server.")
+                            self.status_label.text = "Game resumed!"
+                            self.status_label.style = {"text_color": arcade.color.BRIGHT_GREEN}
+                        print("[GameView] Game resumed!")
+
+                    elif command == "STATE":
+                        # Params: PREFIX STATE <BOARD> <SCORE1> <SCORE2>
+                        self.board.set_state(params[2])
+                        score1 = params[3]
+                        score2 = params[4]
+                        if self.player1_score_label:
+                            self.player1_score_label.text = str(score1)
+                        if self.player2_score_label:
+                            self.player2_score_label.text = str(score2)
+                        # Update Active Player for the Green Dot
+                        self.active_player = int(params[5])
+                        # Clear warning text if it was showing a pass
+                        if self.status_label:
+                            self.status_label.text = "Game in progress..."
+                            self.status_label.style = {"text_color": arcade.color.YELLOW}
+                    elif command == "SERVER_DISCONNECT":
+                        print("[GameView] Disconnected from server.")
+                        self.show_server_error_popup()
+                    elif command == "DISCONNECT":
+                        player_num = int(params[2])
+                        player_name: str = self.username_one if player_num == 1 else self.username_two
+                        # Check if we are currently looking at the Game Over / Rematch screen
+                        if getattr(self, "rematch_box", None) or getattr(self, "end_box", None):
+                            if self.rematch_box:
+                                self.manager.remove(self.rematch_box)
+                                self.rematch_box = None
+                            if self.end_box:
+                                self.manager.remove(self.end_box)
+                                self.end_box = None
+                            self.show_error_popup(f"{player_name} left.\nRematch cancelled.")
+                        else:
+                            print(f"[GameView] Player {player_name} disconnected from the game.")
+                            self.show_pause_modal(player_name)
+                    elif command == "RECONNECT":
+                        if self.pause_box is not None:
+                            self.manager.remove(self.pause_box)
+                            self.pause_box = None
+                            print("[GameView] Opponent reconnected. ")
+                            if self.status_label:
+                                self.status_label.text = "Opponent Reconnected!"
+                    elif command == "PASS":
+                        if self.status_label:
+                            self.status_label.text = "No moves available!\nTurn passed to opponent."
+                            self.status_label.style = {"text_color": arcade.color.RED}
+                        # Manually switch active player locally for instant feedback
+                        self.active_player = 2 if self.active_player == 1 else 1
+                        print("[GameView] Turn passed.")
+                    elif command == "END":
+                        winner_id = int(params[2])
+                        self.active_player = 1
+                        self.show_game_over_popup(winner_id)
+                    elif command == "LOBBY":
+                        # We will get here if lobby no longer exists on reconnect
+                        print("[GameView] Reconnection failed: Game no longer exists.")
+
+                        if getattr(self, "reconnect_box", None):
+                            self.manager.remove(self.reconnect_box)
+                            self.reconnect_box = None
+
+                        self.show_error_popup("Reconnection Failed:\nThe game was closed because\nthe opponent left.")
+                    else:
+                        print("[GameView] Unexpected command from server.")
+            except Exception as e:
+                print(f"[GameView] Error processing server message: {e}")
 
     def on_mouse_press(self, x, y, button, key_modifiers):
         """
