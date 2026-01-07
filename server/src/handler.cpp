@@ -31,6 +31,7 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
     }
 
     std::string command = args[1];
+    player.tolerance = 0;
 
     try {
         if (command == "CREATE") {
@@ -106,8 +107,8 @@ void handleMessage(int clientSocket, const char* message, Player& player) {
             handleRematch(clientSocket, lobbyId);
         }
         else if (command == "HEARTBEAT") {
-            player.tolerance = 0;
-            return;
+            std::string response = "REV HEARTPOP\n";
+            send(clientSocket, response.c_str(), response.size(), 0);
         }
         else {
             std::cout << "[SECURITY] Unknown command: " << command << std::endl;

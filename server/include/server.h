@@ -7,7 +7,7 @@
  * 3. Listens for incoming connections.
  * 4. Spawns a new thread (handleClientLogic) for each connected client.
  */
-void startServer();
+void startServer(std::string ip, int port);
 
 /**
  * @brief The main thread function for a single connected client.

@@ -3,12 +3,16 @@ import time
 
 SERVER_ADRESS = "127.0.0.1"
 PORT = 10001
+HEARTBEAT_INTERVAL = 2.0  # Send heartbeat every 2 seconds
+TIMEOUT_LIMIT = 6.0       # Disconnect if no response for 6 seconds
 
 
 def connect_to_server(server_address=SERVER_ADRESS, port=PORT):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_address, port))
+        sock.last_response = time.time()
+
         return sock
     except socket.error as e:
         print(f"Connection error: {e}")
@@ -18,8 +22,12 @@ def connect_to_server(server_address=SERVER_ADRESS, port=PORT):
 def start_receive_thread(client_socket, server_queue):
     """
     Handles receiving data. Uses a buffer to fix split packets.
+    Updates the 'last_response' timestamp on every valid message.
     """
     buffer = ""
+    bad_message_count = 0
+    MAX_BAD_MESSAGES = 5
+
     try:
         while True:
             data = client_socket.recv(1024)
@@ -27,39 +35,63 @@ def start_receive_thread(client_socket, server_queue):
                 print("[Server Thread] Server closed the connection.")
                 break
 
+            client_socket.last_response = time.time()
             buffer += data.decode('utf-8')
 
-            # Process all complete messages in the buffer
             while "\n" in buffer:
                 message, buffer = buffer.split("\n", 1)
-                if message.strip():
-                    server_queue.put(message.strip())
+                message = message.strip()
 
-    except (ConnectionResetError, BrokenPipeError):
-        print("[Server Thread] Connection to server was lost.")
+                if message:
+                    if not message.startswith("REV"):
+                        bad_message_count += 1
+                        if bad_message_count >= MAX_BAD_MESSAGES:
+                            raise ConnectionAbortedError("Too many invalid messages.")
+
+                    else:
+                        bad_message_count = 0
+
+                        # 💓 HEARTBEAT LOGIC
+                        # If it's just a Ping-Pong, don't spam the UI queue
+                        if "HEARTPOP" in message:
+                            # We already updated timestamp above, so just ignore this line
+                            continue
+
+                        server_queue.put(message)
+
+    except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+        print("[Server Thread] Connection lost.")
     except Exception as e:
-        print(f"[Server Thread] An error occurred: {e}")
+        print(f"[Server Thread] Error: {e}")
     finally:
         if client_socket:
             client_socket.close()
         server_queue.put("REV SERVER_DISCONNECT")
-        print("[Server Thread] Disconnected.")
 
 
-def start_heartbeat_thread(client_socket, server_queue, interval=5):
-    print(f"[Heartbeat] Thread started. Pinging every {interval}s.")
+def start_heartbeat_thread(client_socket, server_queue):
+    """
+    Sends heartbeats AND checks for timeouts.
+    """
+    print(f"[Heartbeat] Started. Ping: {HEARTBEAT_INTERVAL}s, Timeout: {TIMEOUT_LIMIT}s")
+
+    if not hasattr(client_socket, 'last_response'):
+        client_socket.last_response = time.time()
+
     try:
         while True:
-            time.sleep(interval)
+            time.sleep(HEARTBEAT_INTERVAL)
             message = "REV HEARTBEAT\n"
             client_socket.sendall(message.encode('utf-8'))
 
-    except (ConnectionResetError, BrokenPipeError, OSError) as e:
-        print(f"[Heartbeat] Network fail: {e}")
-        server_queue.put("REV SERVER_DISCONNECT")
-        try:
-            client_socket.close()
-        except Exception as e:
-            print(f"[Heartbeat] An error occurred: {e}")
-        finally:
-            return
+            time_since_last_response = time.time() - client_socket.last_response
+            if time_since_last_response > TIMEOUT_LIMIT:
+                print(f"[Heartbeat] TIMEOUT! No response for {time_since_last_response:.1f}s.")
+                # Closing the socket will trigger the exception in start_receive_thread
+                client_socket.close()
+                return
+
+    except (ConnectionResetError, BrokenPipeError, OSError):
+        return
+    except Exception as e:
+        print(f"[Heartbeat] Error: {e}")

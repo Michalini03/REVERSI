@@ -19,11 +19,19 @@ std::vector<int> clientSockets;
 std::mutex clients_mutex;
 std::mutex lobbies_mutex;
 
-void startServer() {
+void startServer(std::string ip, int port) {
     int server_fd, new_socket;
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
+
+    const int finalPort;
+
+    if (port > 0) {
+        finalPort = port;
+    } else {
+        finalPort = PORT; 
+    }
     
     for (int i = 0; i < LOBBY_COUNT; ++i) {
         lobbies.emplace_back(i);
@@ -41,7 +49,11 @@ void startServer() {
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    if (!ip.empty()) {
+        address.sin_addr.s_addr = inet_addr(ip.c_str());
+    } else {
+        address.sin_addr.s_addr = INADDR_ANY;
+    }
     address.sin_port = htons(PORT);
 
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {

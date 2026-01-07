@@ -110,6 +110,7 @@ class LobbyView(arcade.View):
         def on_message_box_close(event):
             pass
 
+        self.server_queue = None
         self.manager.add(message_box)
 
     def connect_and_start(self):
@@ -134,7 +135,7 @@ class LobbyView(arcade.View):
         print("[Main Thread] Successfully connected.")
         self.client_socket = client_socket
         self.server_queue = queue.Queue()
-        
+
         self.ip_adress = target_ip
         self.port = target_port
 
@@ -156,7 +157,7 @@ class LobbyView(arcade.View):
             daemon=True
         )
         receive_thread.start()
-        
+
         heartbeat_thread = threading.Thread(
             target=start_heartbeat_thread,
             args=(client_socket, self.server_queue,),
