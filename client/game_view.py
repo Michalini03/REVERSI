@@ -443,6 +443,7 @@ class GameView(arcade.View):
                     elif command == "LOBBY":
                         # We will get here if lobby no longer exists on reconnect
                         print("[GameView] Reconnection failed: Game no longer exists.")
+                        self.is_reconnecting = False
 
                         if getattr(self, "reconnect_box", None):
                             self.manager.remove(self.reconnect_box)

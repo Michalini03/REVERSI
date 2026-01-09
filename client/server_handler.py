@@ -4,7 +4,7 @@ import time
 SERVER_ADRESS = "127.0.0.1"
 PORT = 10001
 HEARTBEAT_INTERVAL = 2.0  # Send heartbeat every 2 seconds
-TIMEOUT_LIMIT = 6.0       # Disconnect if no response for 6 seconds
+TIMEOUT_LIMIT = 15.0       # Disconnect if no response for 15 seconds
 
 
 class GameSocket:
@@ -50,6 +50,9 @@ def start_receive_thread(client_socket, server_queue):
 
     try:
         while True:
+            if client_socket.sock.fileno() == -1:
+                break
+            
             data = client_socket.recv(1024)
             if not data:
                 print("[Server Thread] Server closed the connection.")

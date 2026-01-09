@@ -2,8 +2,12 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
+#include <signal.h>
 
 int main(int argc, char* argv[]) {
+
+    signal(SIGPIPE, SIG_IGN);
+    
     try {
         std::string serverIP = "";
         int serverPort = 0;

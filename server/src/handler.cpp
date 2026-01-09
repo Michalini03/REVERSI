@@ -325,6 +325,10 @@ int handleRematch(int clientSocket, int lobbyId) {
     }
 
     if(wantsRematch) {
+        Player *player1 = lobby->getPlayer1();
+        Player *player2 = lobby->getPlayer2();
+        player1->state = STATE_PLAYING;
+        player2->state = STATE_PLAYING;
         sendStartingPlayerInfo(playerSocket1, name1, name2, 1, *lobby);
         sendStartingPlayerInfo(playerSocket2, name1, name2, 1, *lobby);
     }
